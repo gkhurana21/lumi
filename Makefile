@@ -1,10 +1,14 @@
 PY ?= .venv/bin/python
+# 3.11 is what the macOS dev machine runs; Ubuntu 24.04 ships 3.12. mediapipe 0.10.14 needs <= 3.12.
+PYTHON ?= $(shell command -v python3.11 || command -v python3.12)
 
 install:
-	python3.11 -m venv .venv
+	$(PYTHON) -m venv .venv
 	@if [ "$$(uname)" = Darwin ] && ! $(PY) -c "import pybullet" 2>/dev/null; then $(MAKE) pybullet-mac; fi
-	$(PY) -m pip install -r requirements.txt
+	$(PY) -m pip install -r requirements.txt -c constraints.txt
 	@cp -n .env.example .env 2>/dev/null || true
+	@# Chroma's embedder downloads an ONNX model on first use; fetch it now, not during the first scene scan.
+	$(PY) -c "from chromadb.utils.embedding_functions import DefaultEmbeddingFunction as E; E()(['warm-up'])"
 # PyPI has no macOS arm64 pybullet wheel, and the source build fails on the macOS 26 SDK because the
 # bundled zlib defines fdopen() as a macro. Build 3.2.7 with that classic-Mac-only stub removed.
 pybullet-mac:

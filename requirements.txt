@@ -1,14 +1,14 @@
-fastapi>=0.115
-uvicorn[standard]>=0.30
-pydantic-settings>=2.4
-numpy>=1.26
-opencv-python>=4.9
-mediapipe==0.10.14  # pinned: uses the legacy mp.solutions API
-webrtcvad-wheels>=2.0.14
-chromadb>=0.5
-anthropic>=0.40
-openai>=1.50
-pybullet>=3.2.6
-pytest>=8
-httpx>=0.27
-ruff>=0.6
+# Direct dependencies, pinned to the tested set. Transitive pins: constraints.txt (make install uses both).
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
+pydantic-settings==2.15.0
+numpy==2.4.6
+mediapipe==0.10.14  # legacy mp.solutions API; brings opencv-contrib-python, which provides cv2
+webrtcvad-wheels==2.0.14
+chromadb==1.5.9
+anthropic==1.8.0
+openai==3.19.2
+pybullet==3.2.7  # no macOS arm64 wheel: make install builds a patched copy (see Makefile)
+pytest==9.1.1
+httpx==0.28.1
+ruff==0.16.9
