@@ -5,3 +5,4 @@ __pycache__/
 .env
 data/chroma/
 out/
+build/

@@ -6,6 +6,7 @@ A 5-DOF desk lamp character that notices you looking at it, greets you with moti
 
 ```bash
 make install      # Python 3.11 venv (mediapipe needs <= 3.12), copies .env.example to .env
+                  # on macOS this first builds a patched pybullet (no arm64 wheel; ~2 min, see docs/DECISIONS.md)
 # put the supplied files at robot/dummy_lamp_6dof.urdf and robot/assets/lamp_shade.stl
 make fake         # offline, canned speech
 make run          # uses .env (PROVIDERS=cloud + keys for real speech)

@@ -3,7 +3,7 @@
 Work top to bottom. A milestone is done only when its checks pass. Mark `[x]` as you go.
 
 ## M0 Setup
-- [ ] `make install`, `make test`, `make lint` all green.
+- [x] `make install`, `make test`, `make lint` all green.
 - [ ] Supplied files placed at `robot/dummy_lamp_6dof.urdf` and `robot/assets/lamp_shade.stl`; `make urdf` shows every mesh `OK`.
 - [ ] `make render` produces PNGs. (Unverified script: fix it if it fails.)
 
