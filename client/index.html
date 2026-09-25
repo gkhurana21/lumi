@@ -1,0 +1,130 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Lumi</title>
+<style>
+body{font:14px system-ui;margin:20px;display:grid;grid-template-columns:480px 1fr;gap:20px;background:#111;color:#ddd}
+video{width:480px;border-radius:8px;background:#000;transform:scaleX(-1)}
+#log{height:520px;overflow:auto;border:1px solid #333;border-radius:8px;padding:8px;font:12px ui-monospace,monospace}
+.pill{display:inline-block;padding:4px 10px;border-radius:99px;background:#222;margin-right:6px}
+#light{width:60px;height:60px;border-radius:50%;display:inline-block;vertical-align:middle;box-shadow:0 0 30px currentColor}
+button,input{font:inherit;padding:6px 10px;border-radius:6px;border:1px solid #444;background:#1c1c1c;color:#ddd}
+</style></head>
+<body>
+<div>
+  <video id="v" autoplay muted playsinline></video>
+  <p><button id="go">Start</button> <span class="pill" id="st">offline</span><span class="pill" id="mood">-</span><span id="light"></span></p>
+  <p><input id="txt" placeholder="type instead of speaking" size="36"> <button id="send">Send</button></p>
+</div>
+<div id="log"></div>
+<script>
+const FR = {AUDIO_IN: 1, VIDEO_IN: 2, AUDIO_OUT: 3};
+const $ = id => document.getElementById(id);
+let ws, micCtx, out, playHead = 0, muted = false, sources = [], doneTimer, music = null;
+const log = s => { const d = document.createElement('div'); d.textContent = s; $('log').prepend(d); };
+const pack = (k, buf) => { const u = new Uint8Array(buf.byteLength + 1); u[0] = k; u.set(new Uint8Array(buf), 1); return u.buffer; };
+
+// Mic -> 16 kHz PCM16, 20 ms frames
+const WORKLET = `class Cap extends AudioWorkletProcessor{constructor(){super();this.b=new Int16Array(320);this.i=0}
+process(inp){const c=inp[0][0];if(!c)return true;for(let k=0;k<c.length;k++){const s=Math.max(-1,Math.min(1,c[k]));
+this.b[this.i++]=s<0?s*32768:s*32767;if(this.i===320){this.port.postMessage(this.b.buffer.slice(0));this.i=0}}return true}}
+registerProcessor('cap',Cap)`;
+
+async function start() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: {width: 640, height: 480},
+    audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true}});
+  $('v').srcObject = stream;
+  ws = new WebSocket(`ws://${location.host}/ws`); ws.binaryType = 'arraybuffer';
+  ws.onopen = () => $('st').textContent = 'connected';
+  ws.onclose = () => $('st').textContent = 'offline';
+  ws.onmessage = onMsg;
+
+  micCtx = new AudioContext({sampleRate: 16000});  // Chrome resamples the mic for us
+  await micCtx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], {type: 'application/javascript'})));
+  const node = new AudioWorkletNode(micCtx, 'cap');
+  node.port.onmessage = e => ws.readyState === 1 && ws.send(pack(FR.AUDIO_IN, e.data));
+  const sink = micCtx.createGain(); sink.gain.value = 0;  // keeps the graph pulling, no local monitoring
+  micCtx.createMediaStreamSource(stream).connect(node).connect(sink).connect(micCtx.destination);
+
+  out = new AudioContext({sampleRate: 24000});
+  const cv = document.createElement('canvas'); cv.width = 640; cv.height = 480; const g = cv.getContext('2d');
+  setInterval(() => {  // ~5 fps; server drops frames while busy
+    if (ws.readyState !== 1) return;
+    g.drawImage($('v'), 0, 0, 640, 480);
+    cv.toBlob(b => b && b.arrayBuffer().then(a => ws.send(pack(FR.VIDEO_IN, a))), 'image/jpeg', 0.7);
+  }, 200);
+}
+
+// ---- voice ----
+function playPCM(buf) {
+  if (muted) return;
+  const i16 = new Int16Array(buf), f = new Float32Array(i16.length);
+  for (let k = 0; k < i16.length; k++) f[k] = i16[k] / 32768;
+  const ab = out.createBuffer(1, f.length, 24000); ab.copyToChannel(f, 0);
+  const s = out.createBufferSource(); s.buffer = ab; s.connect(out.destination);
+  playHead = Math.max(playHead, out.currentTime + 0.05); s.start(playHead); playHead += ab.duration;
+  sources.push(s); s.onended = () => { sources = sources.filter(x => x !== s); };
+}
+function stopVoice() { muted = true; sources.forEach(s => { try { s.stop(); } catch {} }); sources = []; playHead = 0; }
+
+// ---- sound effects: [startHz, endHz, seconds] ----
+const SFX = {notice: [[500, 900, .12]], greet: [[523, 784, .09], [784, 1175, .14]], listen: [[880, 880, .05]],
+             sleep: [[700, 220, .6]], error: [[320, 180, .25]]};
+function sfx(name) {
+  let t = out.currentTime;
+  for (const [f0, f1, d] of SFX[name] || []) {
+    const o = out.createOscillator(), e = out.createGain(); o.type = 'triangle';
+    o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + d);
+    e.gain.setValueAtTime(.0001, t); e.gain.exponentialRampToValueAtTime(.25, t + .01); e.gain.exponentialRampToValueAtTime(.0001, t + d);
+    o.connect(e).connect(out.destination); o.start(t); o.stop(t + d + .02); t += d;
+  }
+}
+
+// ---- generative music (no licensed audio), tempo matches the server's dance BPM ----
+const SCALES = {happy: [0, 4, 7, 12, 7, 4, 9, 7], chill: [0, 3, 7, 10, 12, 10, 7, 3]};
+function startMusic(mood, bpm) {
+  stopMusic();
+  const g = out.createGain(); g.gain.value = .12; g.connect(out.destination);
+  const notes = SCALES[mood] || SCALES.happy, base = mood === 'chill' ? 220 : 262, step = 60 / bpm / 2;
+  let i = 0, next = out.currentTime + .05;
+  const id = setInterval(() => {
+    while (next < out.currentTime + .2) {
+      const o = out.createOscillator(), e = out.createGain(); o.frequency.value = base * 2 ** (notes[i % 8] / 12);
+      e.gain.setValueAtTime(.0001, next); e.gain.exponentialRampToValueAtTime(1, next + .02); e.gain.exponentialRampToValueAtTime(.0001, next + step * .9);
+      o.connect(e).connect(g); o.start(next); o.stop(next + step);
+      if (i % 4 === 0) {
+        const b = out.createOscillator(), be = out.createGain(); b.type = 'triangle'; b.frequency.value = base / 2 * 2 ** (notes[(i >> 2) % 8] / 12);
+        be.gain.setValueAtTime(.5, next); be.gain.exponentialRampToValueAtTime(.0001, next + step * 3.8);
+        b.connect(be).connect(g); b.start(next); b.stop(next + step * 4);
+      }
+      next += step; i++;
+    }
+  }, 50);
+  music = {g, id};
+}
+function stopMusic() { if (!music) return; clearInterval(music.id); music.g.gain.setTargetAtTime(0, out.currentTime, .2); music = null; }
+const duck = on => music && music.g.gain.setTargetAtTime(on ? .025 : .12, out.currentTime, .1);
+
+function onMsg(e) {
+  if (e.data instanceof ArrayBuffer) { if (new Uint8Array(e.data)[0] === FR.AUDIO_OUT) playPCM(e.data.slice(1)); return; }
+  const m = JSON.parse(e.data);
+  switch (m.type) {
+    case 'state': $('st').textContent = m.state; log(`${m.prev} -> ${m.state}  (${m.event})`);
+      duck(['listening', 'thinking', 'speaking'].includes(m.state)); break;
+    case 'tts_start': muted = false; clearTimeout(doneTimer); break;
+    case 'tts_end': { const ms = Math.max(0, (playHead - out.currentTime) * 1000);
+      doneTimer = setTimeout(() => ws.send(JSON.stringify({type: 'playback_done'})), ms + 100); break; }
+    case 'stop_audio': clearTimeout(doneTimer); stopVoice(); break;
+    case 'sfx': sfx(m.name); log(`sfx: ${m.name}`); break;
+    case 'music': m.action === 'play' ? startMusic(m.mood, m.bpm) : stopMusic(); log(`music: ${m.action} ${m.mood || ''}`); break;
+    case 'transcript': log(`${m.role}: ${m.text}${m.emotion ? `  [${m.emotion}]` : ''}`); break;
+    case 'scene': log('scene: ' + m.objects.map(o => o.name).join(', ')); break;
+    case 'body': { $('mood').textContent = `${m.mood} ${m.va.join(',')}`;
+      const [r, g, b] = m.light.rgb.map(c => Math.round(c * 255 * (.3 + .7 * m.light.brightness)));
+      $('light').style.background = $('light').style.color = `rgb(${r},${g},${b})`; break; }
+  }
+}
+$('go').onclick = start;
+$('send').onclick = () => { ws && ws.send(JSON.stringify({type: 'text', text: $('txt').value})); $('txt').value = ''; };
+$('txt').onkeydown = e => e.key === 'Enter' && $('send').click();
+</script>
+</body></html>
