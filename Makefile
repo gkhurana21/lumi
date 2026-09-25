@@ -31,5 +31,7 @@ render:
 	$(PY) scripts/sim_poses.py --render out/poses
 trace:
 	$(PY) scripts/analyze_trace.py
+cloudcheck:
+	$(PY) scripts/check_cloud.py
 
-.PHONY: install pybullet-mac run fake test lint urdf poses sweep render trace
+.PHONY: install pybullet-mac run fake test lint urdf poses sweep render trace cloudcheck

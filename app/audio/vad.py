@@ -3,13 +3,15 @@ from __future__ import annotations
 
 import collections
 
+import numpy as np
 import webrtcvad
 
 
 class VAD:
     FRAME_MS = 30
 
-    def __init__(self, sr: int = 16000, aggressiveness: int = 2, start_frames: int = 4, end_frames: int = 20):
+    def __init__(self, sr: int = 16000, aggressiveness: int = 2, start_frames: int = 4, end_frames: int = 20,
+                 snr: float = 2.5):
         self.sr = sr
         self.vad = webrtcvad.Vad(aggressiveness)
         self.frame_bytes = sr * self.FRAME_MS // 1000 * 2
@@ -21,6 +23,10 @@ class VAD:
         self._utt = bytearray()
         self._run = 0
         self.speaking = False
+        # webrtcvad adapts during speech and can keep calling steady room noise "speech": utterances never end, or
+        # restart on noise. A frame also has to beat the running noise RMS (unvoiced frames) by `snr` to count.
+        self.snr = snr
+        self.noise: float | None = None  # EMA of RMS over unvoiced frames outside utterances
 
     def feed(self, pcm: bytes) -> list[tuple[str, bytes | None]]:
         events: list[tuple[str, bytes | None]] = []
@@ -30,8 +36,11 @@ class VAD:
         while len(self._buf) >= fb:
             frame = bytes(self._buf[:fb])
             del self._buf[:fb]
-            voiced = self.vad.is_speech(frame, self.sr)
+            rms = float(np.sqrt(np.mean(np.frombuffer(frame, np.int16).astype(np.float32) ** 2)))
+            voiced = self.vad.is_speech(frame, self.sr) and rms > self.snr * max(self.noise or 0.0, 20.0)
             if not self.speaking:
+                if not voiced:
+                    self.noise = rms if self.noise is None else 0.95 * self.noise + 0.05 * rms
                 self._pre.append(frame)
                 self._run = self._run + 1 if voiced else 0
                 if self._run >= need:

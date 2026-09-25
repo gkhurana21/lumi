@@ -60,6 +60,19 @@ SCENE_TOOL = {
 }
 
 
+# A hung request must not stall the character: THINKING already aborts after 10 s, and a stuck scene call would
+# block every later scan. One retry covers transient 429/5xx. A float: the Anthropic SDK rejects httpx.Timeout.
+TIMEOUT = 10.0
+
+
+def _anthropic(client: AsyncAnthropic | None) -> AsyncAnthropic:
+    return client or AsyncAnthropic(api_key=settings.anthropic_api_key or None, timeout=TIMEOUT, max_retries=1)
+
+
+def _openai(client: AsyncOpenAI | None) -> AsyncOpenAI:
+    return client or AsyncOpenAI(api_key=settings.openai_api_key or None, timeout=TIMEOUT, max_retries=1)
+
+
 def _pcm_to_wav(pcm: bytes, sr: int) -> bytes:
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
@@ -71,8 +84,8 @@ def _pcm_to_wav(pcm: bytes, sr: int) -> bytes:
 
 
 class OpenAISTT:
-    def __init__(self):
-        self.c = AsyncOpenAI(api_key=settings.openai_api_key or None)
+    def __init__(self, client: AsyncOpenAI | None = None):
+        self.c = _openai(client)
 
     async def transcribe(self, pcm16: bytes, sr: int = 16000) -> str:
         r = await self.c.audio.transcriptions.create(
@@ -81,8 +94,8 @@ class OpenAISTT:
 
 
 class OpenAITTS:
-    def __init__(self):
-        self.c = AsyncOpenAI(api_key=settings.openai_api_key or None)
+    def __init__(self, client: AsyncOpenAI | None = None):
+        self.c = _openai(client)
 
     async def stream(self, text: str):
         carry = b""
@@ -99,8 +112,8 @@ class OpenAITTS:
 
 
 class ClaudeLLM:
-    def __init__(self):
-        self.c = AsyncAnthropic(api_key=settings.anthropic_api_key or None)
+    def __init__(self, client: AsyncAnthropic | None = None):
+        self.c = _anthropic(client)
 
     async def respond(self, *, user_text, history, memories, scene, mood):
         ctx = [f"Your current mood: {mood}."]
@@ -119,12 +132,12 @@ class ClaudeLLM:
         for b in msg.content:
             if b.type == "tool_use":
                 return b.input
-        return {"say": "Hmm, my thoughts got tangled.", "emotion": "confused", "gesture": "tilt"}
+        return {"say": "Hmm, my thoughts got tangled.", "emotion": "confused", "gesture": "tilt", "music": "none"}
 
 
 class ClaudeScene:
-    def __init__(self):
-        self.c = AsyncAnthropic(api_key=settings.anthropic_api_key or None)
+    def __init__(self, client: AsyncAnthropic | None = None):
+        self.c = _anthropic(client)
 
     async def describe(self, jpeg: bytes) -> list[dict]:
         msg = await self.c.messages.create(
