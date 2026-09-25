@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.body.behaviors import ROLES, load_joints  # noqa: E402
 
-path = sys.argv[1] if len(sys.argv) > 1 else "robot/dummy_lamp_6dof.urdf"
+path = sys.argv[1] if len(sys.argv) > 1 else "robot/dummy_lamp_5dof.urdf"
 if not os.path.exists(path):
     sys.exit(f"URDF not found at {path}. Put the supplied robot/ folder at the repo root.")
 root = ET.parse(path).getroot()

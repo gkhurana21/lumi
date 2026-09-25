@@ -15,10 +15,11 @@ import pybullet as p  # noqa: E402
 
 from app.body import behaviors  # noqa: E402
 from app.body.behaviors import GESTURES, Body  # noqa: E402
+from app.body.sim import CAMERA, sim_urdf  # noqa: E402
 from app.core.fsm import Affect, State  # noqa: E402
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--urdf", default="robot/dummy_lamp_6dof.urdf")
+ap.add_argument("--urdf", default="robot/dummy_lamp_5dof.urdf")
 ap.add_argument("--sweep", action="store_true")
 ap.add_argument("--render", metavar="OUTDIR")
 args = ap.parse_args()
@@ -26,8 +27,7 @@ args = ap.parse_args()
 urdf = os.path.abspath(args.urdf)
 p.connect(p.DIRECT if args.render else p.GUI)
 p.setGravity(0, 0, 0)
-p.setAdditionalSearchPath(os.path.dirname(urdf))
-robot = p.loadURDF(urdf, useFixedBase=True)
+robot = p.loadURDF(sim_urdf(urdf), useFixedBase=True)
 idx = {p.getJointInfo(robot, i)[1].decode(): i for i in range(p.getNumJoints(robot))}
 
 
@@ -45,7 +45,7 @@ clock = SimClock()
 if args.render:
     behaviors.time = clock
 body = Body(urdf)
-CAM = dict(cameraDistance=0.9, cameraYaw=45, cameraPitch=-20, cameraTargetPosition=[0, 0, 0.25])
+CAM = CAMERA
 VIEWS = (45, 0)  # three-quarter and side view, side by side
 if not args.render:
     p.resetDebugVisualizerCamera(**CAM)

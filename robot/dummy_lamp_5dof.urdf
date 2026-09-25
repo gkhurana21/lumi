@@ -1,0 +1,331 @@
+<?xml version="1.0"?>
+<!--
+  Fictional five-DOF articulated lamp for the character-robot software challenge.
+
+  This model is a software test fixture. Its dimensions, masses, inertias,
+  topology, joint names, and limits are not derived from any production robot.
+
+  Coordinate convention:
+    x: forward from the lamp head
+    y: left
+    z: up
+
+  The file deliberately contains no simulator plugins, transmissions,
+  controllers, or fixed world joint. Candidates are expected to choose and
+  justify their simulation and control approach.
+-->
+<robot name="dummy_character_lamp_5dof">
+  <material name="fixture_white">
+    <color rgba="0.94 0.94 0.95 1.0"/>
+  </material>
+  <material name="fixture_chrome">
+    <color rgba="0.66 0.68 0.71 1.0"/>
+  </material>
+  <material name="fixture_light">
+    <color rgba="1.0 0.95 0.76 0.95"/>
+  </material>
+  <material name="fixture_black">
+    <color rgba="0.06 0.07 0.08 1.0"/>
+  </material>
+
+  <!-- A single-piece tabletop base. The simulator integration decides how it
+       is supported, contacted, or fixed to the world. -->
+  <link name="base_link">
+    <inertial>
+      <origin xyz="0 0 0.030" rpy="0 0 0"/>
+      <mass value="3.000"/>
+      <inertia ixx="0.022575" ixy="0" ixz="0"
+               iyy="0.022575" iyz="0" izz="0.043350"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0.030" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.170" length="0.060"/>
+      </geometry>
+      <material name="fixture_white"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.030" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.170" length="0.060"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Invisible kinematic frame for base yaw; keeping this separate preserves
+       a clean one-piece housing without removing a controllable DOF. -->
+  <link name="turntable_link">
+    <inertial>
+      <origin xyz="0 0 0.025" rpy="0 0 0"/>
+      <mass value="0.350"/>
+      <inertia ixx="0.000148" ixy="0" ixz="0"
+               iyy="0.000148" iyz="0" izz="0.000237"/>
+    </inertial>
+  </link>
+
+  <joint name="base_yaw_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="turntable_link"/>
+    <origin xyz="0 0 0.060" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-2.600" upper="2.600" effort="6.0" velocity="1.50"/>
+    <dynamics damping="0.18" friction="0.08"/>
+    <safety_controller soft_lower_limit="-2.450" soft_upper_limit="2.450"
+                       k_position="12.0" k_velocity="4.0"/>
+  </joint>
+
+  <link name="lower_arm_link">
+    <inertial>
+      <origin xyz="0 0 0.145" rpy="0 0 0"/>
+      <mass value="0.950"/>
+      <inertia ixx="0.006945" ixy="0" ixz="0"
+               iyy="0.006945" iyz="0" izz="0.000931"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0.145" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.025" length="0.290"/>
+      </geometry>
+      <material name="fixture_white"/>
+    </visual>
+    <visual>
+      <origin xyz="0 0 0" rpy="1.57079632679 0 0"/>
+      <geometry>
+        <cylinder radius="0.053" length="0.080"/>
+      </geometry>
+      <material name="fixture_chrome"/>
+    </visual>
+    <visual>
+      <origin xyz="0 0 0.025" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.035" length="0.030"/>
+      </geometry>
+      <material name="fixture_chrome"/>
+    </visual>
+    <visual>
+      <origin xyz="0 0 0.265" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.035" length="0.030"/>
+      </geometry>
+      <material name="fixture_chrome"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.145" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.039" length="0.290"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="shoulder_pitch_joint" type="revolute">
+    <parent link="turntable_link"/>
+    <child link="lower_arm_link"/>
+    <origin xyz="0 0 0.055" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-0.750" upper="1.050" effort="12.0" velocity="0.95"/>
+    <dynamics damping="0.28" friction="0.12"/>
+    <safety_controller soft_lower_limit="-0.650" soft_upper_limit="0.950"
+                       k_position="14.0" k_velocity="4.0"/>
+  </joint>
+
+  <link name="upper_arm_link">
+    <inertial>
+      <origin xyz="0 0 0.125" rpy="0 0 0"/>
+      <mass value="0.720"/>
+      <inertia ixx="0.003807" ixy="0" ixz="0"
+               iyy="0.003807" iyz="0" izz="0.000737"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0.125" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.024" length="0.250"/>
+      </geometry>
+      <material name="fixture_white"/>
+    </visual>
+    <visual>
+      <origin xyz="0 0 0" rpy="1.57079632679 0 0"/>
+      <geometry>
+        <cylinder radius="0.050" length="0.076"/>
+      </geometry>
+      <material name="fixture_chrome"/>
+    </visual>
+    <visual>
+      <origin xyz="0 0 0.023" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.033" length="0.028"/>
+      </geometry>
+      <material name="fixture_chrome"/>
+    </visual>
+    <visual>
+      <origin xyz="0 0 0.227" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.033" length="0.028"/>
+      </geometry>
+      <material name="fixture_chrome"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.125" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.036" length="0.250"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="elbow_pitch_joint" type="revolute">
+    <parent link="lower_arm_link"/>
+    <child link="upper_arm_link"/>
+    <origin xyz="0 0 0.290" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-1.850" upper="0.400" effort="9.0" velocity="1.15"/>
+    <dynamics damping="0.24" friction="0.10"/>
+    <safety_controller soft_lower_limit="-1.700" soft_upper_limit="0.300"
+                       k_position="14.0" k_velocity="4.0"/>
+  </joint>
+
+  <link name="neck_link">
+    <inertial>
+      <origin xyz="0 0 0.035" rpy="0 0 0"/>
+      <mass value="0.260"/>
+      <inertia ixx="0.000323" ixy="0" ixz="0"
+               iyy="0.000281" iyz="0" izz="0.000390"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0.035" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.043" length="0.070"/>
+      </geometry>
+      <material name="fixture_chrome"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.035" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.050" length="0.070"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="neck_yaw_joint" type="revolute">
+    <parent link="upper_arm_link"/>
+    <child link="neck_link"/>
+    <origin xyz="0 0 0.250" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.350" upper="1.350" effort="3.5" velocity="1.60"/>
+    <dynamics damping="0.12" friction="0.05"/>
+    <safety_controller soft_lower_limit="-1.250" soft_upper_limit="1.250"
+                       k_position="10.0" k_velocity="3.5"/>
+  </joint>
+
+  <link name="head_gimbal_link">
+    <inertial>
+      <origin xyz="0.035 0 0" rpy="0 0 0"/>
+      <mass value="0.180"/>
+      <inertia ixx="0.000170" ixy="0" ixz="0"
+               iyy="0.000125" iyz="0" izz="0.000197"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.035 0 0" rpy="0 1.57079632679 0"/>
+      <geometry>
+        <cylinder radius="0.027" length="0.070"/>
+      </geometry>
+      <material name="fixture_chrome"/>
+    </visual>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="0.046"/>
+      </geometry>
+      <material name="fixture_chrome"/>
+    </visual>
+    <collision>
+      <origin xyz="0.035 0 0" rpy="0 1.57079632679 0"/>
+      <geometry>
+        <cylinder radius="0.034" length="0.070"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="head_pitch_joint" type="revolute">
+    <parent link="neck_link"/>
+    <child link="head_gimbal_link"/>
+    <origin xyz="0 0 0.070" rpy="0 0 3.14159265359"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-0.900" upper="0.700" effort="3.2" velocity="1.45"/>
+    <dynamics damping="0.10" friction="0.04"/>
+    <safety_controller soft_lower_limit="-0.800" soft_upper_limit="0.600"
+                       k_position="10.0" k_velocity="3.5"/>
+  </joint>
+
+  <link name="lamp_head_link">
+    <inertial>
+      <origin xyz="0.065 0 0" rpy="0 0 0"/>
+      <mass value="0.580"/>
+      <inertia ixx="0.002349" ixy="0" ixz="0"
+               iyy="0.003222" iyz="0" izz="0.003222"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="assets/lamp_shade.stl"/>
+      </geometry>
+      <material name="fixture_white"/>
+    </visual>
+    <visual>
+      <origin xyz="0.108 0 0" rpy="0 1.57079632679 0"/>
+      <geometry>
+        <cylinder radius="0.090" length="0.006"/>
+      </geometry>
+      <material name="fixture_light"/>
+    </visual>
+    <collision>
+      <origin xyz="0.045 0 0" rpy="0 1.57079632679 0"/>
+      <geometry>
+        <cylinder radius="0.110" length="0.160"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="lamp_head_fixed_joint" type="fixed">
+    <parent link="head_gimbal_link"/>
+    <child link="lamp_head_link"/>
+    <origin xyz="0.070 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Semantic frames for software integration. URDF does not define light,
+       camera, or speaker behavior; each candidate's simulator adapter may. -->
+  <link name="light_emitter_link">
+    <visual>
+      <geometry>
+        <sphere radius="0.030"/>
+      </geometry>
+      <material name="fixture_light"/>
+    </visual>
+  </link>
+  <joint name="light_emitter_fixed_joint" type="fixed">
+    <parent link="lamp_head_link"/>
+    <child link="light_emitter_link"/>
+    <origin xyz="0.113 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="camera_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 1.57079632679 0"/>
+      <geometry>
+        <cylinder radius="0.012" length="0.018"/>
+      </geometry>
+      <material name="fixture_black"/>
+    </visual>
+  </link>
+  <joint name="camera_fixed_joint" type="fixed">
+    <parent link="lamp_head_link"/>
+    <child link="camera_link"/>
+    <origin xyz="0.050 0 -0.090" rpy="0 0 0"/>
+  </joint>
+
+  <link name="speaker_link">
+  </link>
+  <joint name="speaker_fixed_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="speaker_link"/>
+    <origin xyz="0.105 -0.105 0.045" rpy="0 0 -0.78539816339"/>
+  </joint>
+</robot>

@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 from ..core.fsm import Affect, State
 
 # Semantic roles, bound in order to the first movable URDF joints.
-# VERIFY against dummy_lamp_6dof.urdf (joint order + sign conventions) and reorder if needed.
+# VERIFY against dummy_lamp_5dof.urdf (joint order + sign conventions) and reorder if needed.
 ROLES = ("base_yaw", "shoulder", "elbow", "head_pitch", "head_roll")
 
 # Radians, relative to URDF zero. Convention here: +head_pitch = droop down. Flip signs after first sim run.

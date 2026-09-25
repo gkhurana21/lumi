@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     tts_model: str = "gpt-4o-mini-tts"
     tts_voice: str = "alloy"
     scene_interval_s: float = 4.0
-    urdf_path: str = "robot/dummy_lamp_6dof.urdf"
+    urdf_path: str = "robot/dummy_lamp_5dof.urdf"
     greet_cooldown_s: float = 45.0
     memory: str = "chroma"          # "chroma" | "inmem" (no deps, keyword match)
     memory_path: str = "data/chroma"

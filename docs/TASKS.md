@@ -4,8 +4,8 @@ Work top to bottom. A milestone is done only when its checks pass. Mark `[x]` as
 
 ## M0 Setup
 - [x] `make install`, `make test`, `make lint` all green.
-- [ ] Supplied files placed at `robot/dummy_lamp_6dof.urdf` and `robot/assets/lamp_shade.stl`; `make urdf` shows every mesh `OK`.
-- [ ] `make render` produces PNGs. (Unverified script: fix it if it fails.)
+- [x] Supplied files placed at `robot/dummy_lamp_5dof.urdf` and `robot/assets/lamp_shade.stl`; `make urdf` shows every mesh `OK`.
+- [x] `make render` produces PNGs. (Unverified script: fix it if it fails.)
 
 ## M1 Body mapping
 - [ ] From `make urdf` + renders, correct `ROLES` order and `POSES` signs in `app/body/behaviors.py`.
