@@ -142,8 +142,10 @@ class Session:
     def _on_audio(self, pcm: bytes) -> None:
         for ev, utt in self.vad.feed(pcm):
             if ev == "start":
+                self._trace("vad", ev="start", during=self.fsm.state.value, strict=self.vad.strict)
                 self.fsm.fire(Ev.SPEECH_START)
             else:
+                self._trace("vad", ev="end", sec=round(len(utt) / 32000, 2))
                 self._pending = utt
                 self._t_end = time.perf_counter()
                 self.fsm.fire(Ev.SPEECH_END)

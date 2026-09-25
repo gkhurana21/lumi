@@ -73,6 +73,19 @@ if faces:
     for th in (0.25, 0.40):
         print(f"  |yaw| >= {th:.2f} in {sum(y >= th for y in yaws) / len(yaws):.0%} of face frames")
 
+vad = [r for r in recs if r["kind"] == "vad"]
+if vad:
+    print("\nSPEECH")
+    starts = [r for r in vad if r["ev"] == "start"]
+    ends = [r["sec"] for r in vad if r["ev"] == "end"]
+    print(f"  utterances started: {len(starts)} ({sum(r['strict'] for r in starts)} while the lamp was speaking)")
+    if ends:
+        print(f"  utterance length: median {st.median(ends):.1f} s, shortest {min(ends):.1f} s")
+    barge = [r for r in trans if r["prev"] == "speaking" and r["event"] == "speech_start"]
+    print(f"  barge-ins (lamp audio stopped): {len(barge)} at {[round(r['t'] - t0, 1) for r in barge]} s")
+    aborted = [r for r in trans if r["prev"] == "thinking" and r["event"] == "abort"]
+    print(f"  turns with an empty transcript: {len(aborted)}")
+
 if metrics:
     print("\nTURN LATENCY")
     for k in ("stt_ms", "llm_ms", "first_audio_ms"):

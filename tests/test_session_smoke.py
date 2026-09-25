@@ -349,3 +349,22 @@ def test_a_failing_scene_scan_mid_goal_is_audible(client, live, monkeypatch):
         say(ws, "shine your light on my mug")
         _, seen = recv_until(ws, lambda d: d["type"] == "state" and d["prev"] == "acting", limit=100)
     assert seen[-1]["state"] == "engaged" and "error" in [d["name"] for d in seen if d["type"] == "sfx"]
+
+
+def speak_audio(ws, pcm: bytes) -> None:
+    for i in range(0, len(pcm), 640):  # 20 ms chunks, like the browser
+        ws.send_bytes(b"\x01" + pcm[i:i + 640])
+
+
+def test_spoken_turn_and_barge_in_from_recorded_audio(client):
+    from tests.test_providers import recorded_utterance
+
+    pcm, _ = recorded_utterance()
+    with client.websocket_connect("/ws") as ws:
+        speak_audio(ws, pcm)  # real VAD segmentation over the socket
+        _, seen = recv_until(ws, lambda d: d["type"] == "tts_start")
+        states = [d["state"] for d in seen if d["type"] == "state"]
+        assert states == ["listening", "thinking", "speaking"]
+        speak_audio(ws, pcm)  # talk over the lamp before its playback is done
+        _, seen = recv_until(ws, is_state("listening"), limit=100)
+    assert "stop_audio" in [d["type"] for d in seen]  # server told the client to cut the voice

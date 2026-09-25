@@ -96,3 +96,9 @@ Append one entry per decision or measurement. Format: date, decision, why, evide
 
 - Race: after the acknowledgement's `TTS_DONE`, the goal task was spawned and fired `GOAL` a loop turn later. A camera frame processed in that gap, with the user looking at the target instead of the lamp, would level-fire `ATTN_OFF` -> DISENGAGING, and `GOAL` was then rejected: the request silently dropped. Now `GOAL` fires synchronously right after `TTS_DONE` in the same handler (no await in between), then the executor task is spawned. Test: attention drops during the acknowledgement and the goal still completes.
 - Silent failures made audible: an exception mid-goal (e.g. the vision API down) and the 15 s ACTING timeout both play the `error` sound (plus confused mood or a head shake) before returning to ENGAGED. Test: a scene scan that raises mid-goal.
+
+## 2026-09-25 Live session prep (fake mode, keys later)
+
+- User will add API keys at the end, so the next live session runs `make fake`: camera attention, VAD, echo and barge-in, and the body are all real in that mode; only words and scene contents are canned.
+- Trace now records VAD start/end (with the state it started in and whether the stricter speaking threshold applied); `make trace` reports utterances, barge-ins, and empty-transcript turns, to count false barge-ins from speaker echo.
+- New smoke test streams the recorded utterance as 20 ms mic chunks through the real VAD over the WebSocket: a spoken turn, then speech over the reply triggers `stop_audio` and LISTENING. Before this, every end-to-end test typed its input.
