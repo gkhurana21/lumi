@@ -368,3 +368,16 @@ def test_spoken_turn_and_barge_in_from_recorded_audio(client):
         speak_audio(ws, pcm)  # talk over the lamp before its playback is done
         _, seen = recv_until(ws, is_state("listening"), limit=100)
     assert "stop_audio" in [d["type"] for d in seen]  # server told the client to cut the voice
+
+
+def test_a_beeping_sound_does_not_start_a_conversation(client):
+    import numpy as np
+
+    t = np.arange(16000 * 3) / 16000
+    beep = (8000 * np.sin(2 * np.pi * 1000 * t) * ((t % 0.5) < 0.25)).astype(np.int16).tobytes()
+    with client.websocket_connect("/ws") as ws:
+        speak_audio(ws, beep)
+        seen = []
+        while sum(d["type"] == "body" for d in seen) < 8:  # ~1.6 s of the body stream after the beeps
+            seen.append(recv_until(ws, lambda d: True)[0])
+    assert not [d for d in seen if d["type"] in ("state", "sfx")]  # no listen blip, lamp still idle

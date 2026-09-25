@@ -135,3 +135,38 @@ def test_cloud_providers_build_with_default_clients(monkeypatch):
     monkeypatch.setattr(settings, "openai_api_key", "test")
     p = build_providers()  # constructs the real SDK clients; no network until a call
     assert type(p.llm).__name__ == "ClaudeLLM" and p.llm.c.timeout == 10.0 and p.stt.c.max_retries == 1
+
+
+def _tones(seconds: float = 6.0) -> dict[str, np.ndarray]:
+    t = np.arange(int(16000 * seconds)) / 16000
+    step = 60 / 112 / 2  # the client's music at 112 BPM
+    melody = sum(np.sin(2 * np.pi * 262 * 2 ** (k / 12) * t) * ((t // step) % 8 == i)
+                 for i, k in enumerate([0, 4, 7, 12, 7, 4, 9, 7]))
+    bass = 2 * np.abs(2 * ((t * 131) % 1) - 1) - 1
+    warble = 520 + 140 * np.sin(2 * np.pi * 3 * t)
+    return {
+        "beeping appliance": 8000 * np.sin(2 * np.pi * 1000 * t) * ((t % 0.5) < 0.25),
+        "lamp music": 6000 * (0.7 * melody * ((t % step) < step * 0.9) + 0.5 * bass),
+        "fake TTS babble": 8000 * np.sin(2 * np.pi * np.cumsum(warble) / 16000),
+    }
+
+
+def _events(x: np.ndarray) -> list[tuple[str, float]]:
+    pcm, v, out = x.clip(-32768, 32767).astype(np.int16).tobytes(), VAD(), []
+    for i in range(0, len(pcm), 640):
+        out += [(e, i / 32000) for e, _ in v.feed(pcm[i:i + 640])]
+    return out
+
+
+def test_tones_and_music_do_not_open_a_turn():
+    for name, x in _tones().items():
+        assert _events(x) == [], name  # before the harmonic gate each opened a turn that never closed
+
+
+def test_speech_over_music_still_opens_a_turn_when_speech_starts():
+    with wave.open(WAV) as w:
+        speech = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(float)[8000:39000]
+    mix = _tones()["lamp music"].copy()
+    mix[32000:32000 + len(speech)] += 0.8 * speech  # speech from 2.0 s (voice onset ~2.25 s)
+    ev = _events(mix)
+    assert ev and ev[0][0] == "start" and 2.0 <= ev[0][1] <= 2.6

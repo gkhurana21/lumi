@@ -11,7 +11,7 @@ class VAD:
     FRAME_MS = 30
 
     def __init__(self, sr: int = 16000, aggressiveness: int = 2, start_frames: int = 4, end_frames: int = 20,
-                 snr: float = 2.5):
+                 snr: float = 2.5, min_peaks: int = 4):
         self.sr = sr
         self.vad = webrtcvad.Vad(aggressiveness)
         self.frame_bytes = sr * self.FRAME_MS // 1000 * 2
@@ -27,6 +27,12 @@ class VAD:
         # restart on noise. A frame also has to beat the running noise RMS (unvoiced frames) by `snr` to count.
         self.snr = snr
         self.noise: float | None = None  # EMA of RMS over unvoiced frames outside utterances
+        # Tones (beeps, the lamp's own synthesized music) pass webrtcvad and the energy gate but have 1 to 3 spectral
+        # peaks; voiced speech has many harmonics. An utterance only starts once its voiced run holds a frame with
+        # at least `min_peaks` peaks within 20 dB of the strongest (0 disables). Continuing utterances are unaffected.
+        self.min_peaks = min_peaks
+        self._rich = 0
+        self._win = np.hanning(self.frame_bytes // 2)
 
     def feed(self, pcm: bytes) -> list[tuple[str, bytes | None]]:
         events: list[tuple[str, bytes | None]] = []
@@ -43,8 +49,9 @@ class VAD:
                     self.noise = rms if self.noise is None else 0.95 * self.noise + 0.05 * rms
                 self._pre.append(frame)
                 self._run = self._run + 1 if voiced else 0
-                if self._run >= need:
-                    self.speaking, self._run = True, 0
+                self._rich = (self._rich + self._harmonic(frame)) if voiced else 0
+                if self._run >= need and (not self.min_peaks or self._rich):
+                    self.speaking, self._run, self._rich = True, 0, 0
                     self._utt = bytearray(b"".join(self._pre))
                     self._pre.clear()
                     events.append(("start", None))
@@ -55,7 +62,18 @@ class VAD:
                     events.append(("end", self.flush()))
         return events
 
+    def _harmonic(self, frame: bytes) -> bool:
+        if not self.min_peaks:
+            return True
+        x = np.frombuffer(frame, np.int16).astype(np.float32) * self._win
+        spec = np.abs(np.fft.rfft(x)) ** 2
+        hz = self.sr / len(x)
+        spec = spec[int(100 / hz):int(4000 / hz)]  # voice band
+        mid = spec[1:-1]
+        peaks = (mid > spec[:-2]) & (mid >= spec[2:]) & (mid > spec.max() / 100)  # within 20 dB of the strongest
+        return int(peaks.sum()) >= self.min_peaks
+
     def flush(self) -> bytes:
         utt = bytes(self._utt) if self.speaking else b""
-        self._utt, self._run, self.speaking = bytearray(), 0, False
+        self._utt, self._run, self._rich, self.speaking = bytearray(), 0, 0, False
         return utt

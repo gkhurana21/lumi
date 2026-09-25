@@ -146,7 +146,7 @@ Full log with evidence: `docs/DECISIONS.md`.
 
 - **Local attention, cloud scene understanding.** Engagement must be fast and cheap, so it never waits on a network call; object naming tolerates seconds of latency.
 - **Nose-offset gaze heuristic** instead of a gaze model: robust enough at desk distance, zero training. Fails on strong side lighting or glasses glare. Hysteresis (on below 0.25, off above 0.40) and debouncing keep it from flapping; attention is re-checked every frame so the lamp never stays engaged after you look away mid-reply.
-- **Turn-based STT** (VAD-segmented) instead of streaming STT: simpler and reliable in the timebox; costs ~300 to 600 ms. webrtcvad alone never closed utterances in steady room noise, so a frame must also beat the measured noise floor.
+- **Turn-based STT** (VAD-segmented) instead of streaming STT: simpler and reliable in the timebox; costs ~300 to 600 ms. webrtcvad alone never closed utterances in steady room noise, so a frame must also beat the measured noise floor. Beeps and the lamp's own music passed both, so a turn also needs a harmonic-rich frame to start (speech has many harmonics, tones one to three).
 - **Tool-forced JSON** from the LLM so emotion, gesture, music, and goals are always parseable.
 - **Models choose what, the body decides how.** Goals are a closed action set run by a local executor; models never command joints or timing.
 - **Physical limits in the body, not the sim.** Commands stay inside the URDF soft limits and under its velocity limits. The scaffold's gestures needed 3 to 6 rad/s against 0.95 to 1.6 rad/s limits and were retuned. There is no roll joint, so a head cock is neck yaw on the tilted upper arm with an opposite base yaw (18 deg roll, facing the user).
@@ -162,4 +162,4 @@ Verified in a real browser (headless Chrome, fake camera and mic): the client lo
 
 Not yet verified live: engagement thresholds on a real face, cloud latency, barge-in on laptop speakers, the goal and memory moments with real vision, the Ubuntu install.
 
-Left out on purpose: streaming STT and sentence-level TTS pipelining, speaker identity, multi-person arbitration, object re-identification across renames, sound localization, learned gaze, visual servoing (the camera is the laptop's, not the lamp's `camera_link`, so aiming cannot be checked through the lamp's own view). A speech/tone classifier: persistent tones or music can keep the VAD open (see the technical note's limitations).
+Left out on purpose: streaming STT and sentence-level TTS pipelining, speaker identity, multi-person arbitration, object re-identification across renames, sound localization, learned gaze, visual servoing (the camera is the laptop's, not the lamp's `camera_link`, so aiming cannot be checked through the lamp's own view). A real speech classifier: a TV or radio voice in the room still counts as speech.

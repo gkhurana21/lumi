@@ -51,7 +51,7 @@ Dev machine: MacBook Air M3, 8 GB, built-in camera, mics and speakers. Measureme
 
 - Local attention, cloud scene understanding: engagement is fast and free; object naming tolerates seconds.
 - Nose-offset gaze heuristic with hysteresis and debounce, re-checked every frame: no training, but weak under side lighting or glasses glare.
-- Turn-based STT after a VAD with a noise-floor gate: simpler than streaming, costs ~0.3 to 0.6 s per turn.
+- Turn-based STT after a VAD with a noise-floor gate and a harmonic check on turn starts: simpler than streaming, costs ~0.3 to 0.6 s per turn.
 - Latest-location memory per object name: answers "where is X" with recency; no location history.
 
 ## Known limitations
@@ -60,4 +60,4 @@ Dev machine: MacBook Air M3, 8 GB, built-in camera, mics and speakers. Measureme
 - VLM object positions are coarse; the "moved" tolerance is deliberately loose until calibrated.
 - Single user, no speaker identity; objects renamed by the VLM ("mug" vs "cup") can split memory.
 - Barge-in on laptop speakers depends on browser echo cancellation; headphones are more reliable.
-- Speech detection cannot tell tones from speech: a continuous beep or music the echo canceller misses keeps the lamp listening until its 12 s cap, and it can loop without answering while the sound lasts.
+- A turn only starts on harmonic-rich sound, which rejects beeps and the lamp's own synthesized music (measured), but a TV or radio voice in the room still counts as speech.
