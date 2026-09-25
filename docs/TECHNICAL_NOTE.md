@@ -60,3 +60,4 @@ Dev machine: MacBook Air M3, 8 GB, built-in camera, mics and speakers. Measureme
 - VLM object positions are coarse; the "moved" tolerance is deliberately loose until calibrated.
 - Single user, no speaker identity; objects renamed by the VLM ("mug" vs "cup") can split memory.
 - Barge-in on laptop speakers depends on browser echo cancellation; headphones are more reliable.
+- Speech detection cannot tell tones from speech: a continuous beep or music the echo canceller misses keeps the lamp listening until its 12 s cap, and it can loop without answering while the sound lasts.

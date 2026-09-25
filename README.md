@@ -158,6 +158,8 @@ Full log with evidence: `docs/DECISIONS.md`.
 
 Completed and tested offline (30 tests, fake providers): engagement FSM with disengagement and flapping guards, affect layer, multimodal I/O over one socket, barge-in, scene memory with recency, goal-directed action (spotlight or look at a named object, re-observe, re-aim once), procedural motion and light within joint limits, SFX, music with dancing, offline fake mode, Ubuntu setup script and systemd unit.
 
+Verified in a real browser (headless Chrome, fake camera and mic): the client loads without errors, streams mic and camera at the expected rates, plays replies, and runs a typed goal end to end.
+
 Not yet verified live: engagement thresholds on a real face, cloud latency, barge-in on laptop speakers, the goal and memory moments with real vision, the Ubuntu install.
 
-Left out on purpose: streaming STT and sentence-level TTS pipelining, speaker identity, multi-person arbitration, object re-identification across renames, sound localization, learned gaze, visual servoing (the camera is the laptop's, not the lamp's `camera_link`, so aiming cannot be checked through the lamp's own view).
+Left out on purpose: streaming STT and sentence-level TTS pipelining, speaker identity, multi-person arbitration, object re-identification across renames, sound localization, learned gaze, visual servoing (the camera is the laptop's, not the lamp's `camera_link`, so aiming cannot be checked through the lamp's own view). A speech/tone classifier: persistent tones or music can keep the VAD open (see the technical note's limitations).
