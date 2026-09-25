@@ -99,3 +99,26 @@ def test_engagement_greets_then_disengages_even_if_look_away_lands_mid_speech(cl
         _, seen3 = recv_until(ws, is_state("idle"), limit=60)
         sfx = [d["name"] for d in seen + seen2 + seen3 if d["type"] == "sfx"]
         assert sfx.count("greet") == 1 and sfx[-1] == "sleep"
+
+
+def test_memory_answers_about_an_object_that_left_the_scene(client, monkeypatch):
+    from app.providers.fakes import FakeScene
+
+    scans = iter([[{"name": "mug", "location": "left of the keyboard"}, {"name": "notebook", "location": "front"}],
+                  [{"name": "notebook", "location": "front"}]])
+
+    async def describe(self, jpeg):
+        return next(scans, [{"name": "notebook", "location": "front"}])
+
+    monkeypatch.setattr(FakeScene, "describe", describe)
+    monkeypatch.setattr(settings, "scene_interval_s", 0.0)
+    with client.websocket_connect("/ws") as ws:
+        ws.send_bytes(b"\x02frame-with-mug")
+        first, _ = recv_until(ws, lambda d: d["type"] == "scene")
+        ws.send_bytes(b"\x02frame-without-mug")
+        latest, _ = recv_until(ws, lambda d: d["type"] == "scene")
+        assert "mug" in [o["name"] for o in first["objects"]]
+        assert "mug" not in [o["name"] for o in latest["objects"]]  # gone from scene_now
+        seen = say(ws, "where did I leave my mug?")
+        robot = [d["text"] for d in seen if d["type"] == "transcript" and d["role"] == "robot"]
+        assert robot and "mug" in robot[-1] and "left of the keyboard" in robot[-1]

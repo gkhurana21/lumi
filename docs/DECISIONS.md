@@ -57,3 +57,9 @@ Append one entry per decision or measurement. Format: date, decision, why, evide
 - Provider tests use mocked HTTP transports (no keys, no network): STT uploads the VAD utterance as 16 kHz mono WAV; TTS yields even-length PCM even from an odd-length stream; LLM forces the `respond` tool and puts scene and memories in the system prompt; fallback reply includes every field; scene sends the JPEG and parses objects.
 - `make cloudcheck` times real STT, LLM, first TTS audio, and scene calls over 5 runs using only synthetic inputs (the test utterance, a rendered lamp image). Gives provider latency without a live session.
 - Unpinned requirements resolved to anthropic 1.8.0 (httpx2) and openai 3.19.2. Pin exact versions in M7 so a fresh clone gets the tested set.
+
+## 2026-09-25 M5 offline part
+
+- Smoke test: scene scans report mug + notebook, then notebook only; asked "where did I leave my mug?", the reply names the mug and its last location although it is no longer in `scene_now`.
+- Chroma memory (this Mac, model already cached): client start 874 ms (at server startup), first upsert 431 ms (embedder load), search 112 to 126 ms, all off the event loop. "coffee cup" retrieves the mug first; "cell" ranks notebook above phone, but the LLM gets the top 4 so the phone is still in context.
+- Risk for the Ubuntu target: Chroma's default embedder downloads an ONNX model on first use (cache here is 167 MB). A fresh machine would pay that during the first scene scan. M7: fetch it during setup.
