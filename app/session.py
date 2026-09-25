@@ -64,6 +64,7 @@ class Session:
         self._goal: dict | None = None  # goal from the last reply, run after its acknowledgement is spoken
         self._goal_task: asyncio.Task | None = None
         self._look: tuple[float, float] | None = None  # goal target overriding face gaze (camera frame, [-1, 1])
+        self._tts_cache: dict[str, list[bytes]] = {}  # fixed lines synthesized once, so they land on their beat
         self._trace_f = None
         if settings.trace_dir:
             os.makedirs(settings.trace_dir, exist_ok=True)
@@ -115,6 +116,7 @@ class Session:
         self._spawn(self._ticker())
         if hasattr(self.attn, "warm"):
             self._spawn(asyncio.to_thread(self.attn.warm))
+        self._spawn(self._prefetch(GREETINGS))
         try:
             while True:
                 msg = await self.ws.receive()
@@ -223,6 +225,9 @@ class Session:
         if nxt == State.NOTICING:
             self._emit({"type": "sfx", "name": "notice"})
             self.body.gesture("perk")
+        elif nxt == State.ENGAGED and prev == State.DISENGAGING:  # you looked back before it fell asleep
+            self._emit({"type": "sfx", "name": "notice"})
+            self.body.gesture("perk")
         elif nxt == State.ENGAGED and prev in (State.IDLE, State.NOTICING):
             if time.monotonic() - self._last_greet > settings.greet_cooldown_s:
                 self._last_greet = time.monotonic()
@@ -238,7 +243,8 @@ class Session:
             self._set_music(self._pending_music)
             self._pending_music = None
         elif nxt == State.IDLE:
-            self._emit({"type": "sfx", "name": "sleep"})
+            if prev == State.DISENGAGING:  # a glance that never engaged just settles back, no sleep sound
+                self._emit({"type": "sfx", "name": "sleep"})
             self._set_music("stop")
         if nxt == State.ENGAGED and prev == State.SPEAKING and self._goal:
             goal, self._goal = self._goal, None
@@ -309,11 +315,28 @@ class Session:
             self._emit({"type": "sfx", "name": "error"})
             self.fsm.fire(Ev.ABORT)
 
+    async def _prefetch(self, lines: list[str]) -> None:
+        """Synthesize fixed lines up front: the greeting voice then starts exactly 0.4 s after its chime and bounce
+        instead of 0.4 s plus a variable TTS round trip."""
+        for text in lines:
+            try:
+                self._tts_cache[text] = [c async for c in self.p.tts.stream(text)]
+            except Exception:
+                log.warning("could not prefetch %r; it will stream when needed", text)
+
+    async def _audio(self, text: str):
+        if text in self._tts_cache:
+            for chunk in self._tts_cache[text]:
+                yield chunk
+        else:
+            async for chunk in self.p.tts.stream(text):
+                yield chunk
+
     async def _speak(self, text: str, emotion: str, t0: float | None = None, marks: dict | None = None) -> None:
         self._emit({"type": "transcript", "role": "robot", "text": text, "emotion": emotion})
         self._emit({"type": "tts_start"})
         first = True
-        async for chunk in self.p.tts.stream(text):
+        async for chunk in self._audio(text):
             if first and t0 is not None and marks is not None:
                 marks["first_audio_ms"] = (time.perf_counter() - t0) * 1000
                 marks = {k: round(v) for k, v in marks.items()}

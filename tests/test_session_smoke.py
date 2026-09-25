@@ -200,3 +200,118 @@ def test_talking_over_a_goal_cancels_it(client, monkeypatch):
         _, seen2 = recv_until(ws, lambda d: d["type"] == "tts_end")
     goal_steps = [d["step"] for d in seen + seen2 if d["type"] == "goal"]
     assert "done" not in goal_steps and "failed" not in goal_steps
+
+
+NOTEBOOK = {"name": "notebook", "location": "front right", "x": 0.55, "y": 0.7}
+
+
+@pytest.fixture
+def live(client, monkeypatch):
+    """Scripted camera (look/away frames) and a desk the test can change, over the real WebSocket."""
+    from app.core.fsm import TIMEOUTS, State
+    from app.providers.fakes import FakeScene
+
+    desk = {"objs": [MUG, NOTEBOOK]}
+
+    async def describe(self, jpeg):
+        return list(desk["objs"])
+
+    monkeypatch.setattr(FakeScene, "describe", describe)
+    monkeypatch.setattr(settings, "attention", "mediapipe")
+    monkeypatch.setattr("app.vision.attention.AttentionTracker", _ScriptedAttention.make())
+    monkeypatch.setattr(settings, "scene_interval_s", 0.0)
+    monkeypatch.setitem(TIMEOUTS, State.DISENGAGING, 0.5)
+    return desk
+
+
+def test_demo_script_end_to_end(client, live):
+    """README demo script as one continuous session: every spec moment, with motion, light, voice, SFX, music."""
+    log: list[dict] = []
+
+    def until(pred, limit=200):
+        _, seen = recv_until(ws, pred, limit)
+        log.extend(seen)
+
+    def spoken(text):
+        log.extend(say(ws, text))
+
+    with client.websocket_connect("/ws") as ws:
+        until(lambda d: d["type"] == "body")  # 1. idle
+        frames(ws, b"look", 4)  # 2. engagement: notice, greet
+        until(lambda d: d["type"] == "tts_end")
+        ws.send_text(json.dumps({"type": "playback_done"}))
+        spoken("what do you see on my desk?")  # 3. spoken interaction, grounded in the scene
+        spoken("shine your light on my mug")  # 4. goal-directed action
+        until(lambda d: d["type"] == "tts_end")
+        ws.send_text(json.dumps({"type": "playback_done"}))
+        until(is_state("engaged"), limit=60)
+        live["objs"] = [NOTEBOOK]  # 5. the mug leaves the desk; memory keeps it
+        frames(ws, b"look", 2)
+        until(lambda d: d["type"] == "scene" and "mug" not in [o["name"] for o in d["objects"]])
+        spoken("where did I leave my mug?")
+        spoken("play me a song")  # 6. music and dancing
+        until(lambda d: d["type"] == "music")
+        frames(ws, b"look", 10)  # dance for a couple of seconds
+        until(lambda d: d["type"] == "body", limit=20)
+        frames(ws, b"away", 8)  # 7. disengagement
+        until(is_state("idle"), limit=100)
+
+    states = {d["state"] for d in log if d["type"] == "state"}
+    assert states >= {"noticing", "engaged", "listening", "thinking", "speaking", "acting", "disengaging", "idle"}
+    sfx = {d["name"] for d in log if d["type"] == "sfx"}
+    assert sfx >= {"notice", "greet", "listen", "spot", "sleep"}
+    assert [d["action"] for d in log if d["type"] == "music"] == ["play", "stop"]
+    robot = " | ".join(d["text"] for d in log if d["type"] == "transcript" and d["role"] == "robot")
+    assert "I can see mug" in robot and "spotlight" in robot and "I remember: mug was left of the keyboard" in robot
+    bodies = [d for d in log if d["type"] == "body"]
+    bright = [d["light"]["brightness"] for d in bodies]
+    assert min(bright) <= 0.15 and max(bright) == 1.0  # dim while idle, spotlight for the goal
+    assert len({tuple(d["light"]["rgb"]) for d in bodies}) > 5  # color changes (mood, spotlight, dance)
+    yaw = [d["joints"]["base_yaw_joint"] for d in bodies]
+    assert max(yaw) - min(yaw) > 0.1  # the body visibly moves
+
+
+def test_a_glance_that_never_engages_settles_without_the_sleep_sound(client, live):
+    with client.websocket_connect("/ws") as ws:
+        frames(ws, b"look", 2)  # face seen, attention not yet confirmed
+        recv_until(ws, is_state("noticing"), limit=60)
+        frames(ws, b"gone", 9)
+        _, seen = recv_until(ws, is_state("idle"), limit=60)
+    assert "sleep" not in [d["name"] for d in seen if d["type"] == "sfx"]
+
+
+def test_looking_back_while_disengaging_is_welcomed(client, live, monkeypatch):
+    monkeypatch.setattr(settings, "greet_cooldown_s", 1e12)  # no greeting speech in this test
+    with client.websocket_connect("/ws") as ws:
+        frames(ws, b"look", 4)
+        recv_until(ws, is_state("engaged"), limit=60)
+        frames(ws, b"away", 7)
+        recv_until(ws, is_state("disengaging"), limit=60)
+        frames(ws, b"look", 4)
+        _, seen = recv_until(ws, is_state("engaged"), limit=60)
+    assert "notice" in [d["name"] for d in seen if d["type"] == "sfx"]
+
+
+def test_greeting_voice_is_synthesized_before_it_is_needed(client, live, monkeypatch):
+    from app.providers.fakes import FakeTTS
+    from app.session import GREETINGS
+
+    calls, orig = [], FakeTTS.stream
+
+    def counting(self, text):
+        calls.append(text)
+        return orig(self, text)
+
+    monkeypatch.setattr(FakeTTS, "stream", counting)
+    with client.websocket_connect("/ws") as ws:
+        recv_until(ws, lambda d: d["type"] == "body")
+        for _ in range(60):  # prefetch runs at session start, one line after another (paced like a real stream)
+            if len(calls) == len(GREETINGS):
+                break
+            time.sleep(0.05)
+        time.sleep(1.0)  # let the last line finish
+        assert sorted(calls) == sorted(GREETINGS)
+        frames(ws, b"look", 4)
+        _, seen = recv_until(ws, lambda d: d["type"] == "tts_end")
+    greeting = [d["text"] for d in seen if d["type"] == "transcript" and d["role"] == "robot"][0]
+    assert greeting in GREETINGS and sorted(calls) == sorted(GREETINGS)  # served from the cache, no new TTS call

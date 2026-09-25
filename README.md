@@ -136,7 +136,7 @@ MacBook Air (Apple M3, 8 GB RAM, integrated GPU): built-in 720p camera, built-in
 | Utterance audio (WAV, only between VAD start/end) | OpenAI transcription | each turn | fast, accurate STT without a local model |
 | Transcript, short history, retrieved memories, mood | Anthropic LLM | each turn | character dialogue + structured emotion/gesture/music |
 | One JPEG every 4 s, plus one per goal re-observation | Anthropic vision | continuously; during goals | object names, locations, and image positions for memory and goal aiming |
-| Reply text | OpenAI TTS | each turn | expressive voice, streamed PCM |
+| Reply text; the 3 fixed greeting lines once at session start | OpenAI TTS | each turn; session start | expressive voice, streamed PCM; greetings cached so the voice lands on its beat |
 
 Stays local: all continuous video for attention, continuous mic audio (VAD), the state machine, memory store (Chroma on disk), motion, light, SFX, music, and the session trace (`out/traces/`, numbers only, used for the measurements). Every behavioral decision (when to engage, greet, listen, interrupt, sleep) is local; the cloud only supplies words and scene descriptions. `PROVIDERS=fake` sends nothing.
 
