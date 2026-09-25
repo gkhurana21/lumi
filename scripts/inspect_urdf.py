@@ -35,7 +35,7 @@ for j in root.findall("joint"):
 
 print("\nROLE MAPPING used by app/body/behaviors.py (movable joints in file order)")
 movable = load_joints(path)
-for role, (name, lo, hi) in zip(ROLES, movable, strict=False):
-    print(f"  {role:12s} -> {name}  [{lo:+.2f}, {hi:+.2f}]")
+for role, (name, lo, hi, vmax) in zip(ROLES, movable, strict=False):
+    print(f"  {role:12s} -> {name:22s} soft [{lo:+.2f}, {hi:+.2f}]  vmax {vmax:.2f} rad/s")
 if len(movable) != len(ROLES):
     print(f"  NOTE: {len(movable)} movable joints vs {len(ROLES)} roles; extra joints stay at zero.")

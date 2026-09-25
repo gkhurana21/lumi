@@ -8,9 +8,9 @@ Work top to bottom. A milestone is done only when its checks pass. Mark `[x]` as
 - [x] `make render` produces PNGs. (Unverified script: fix it if it fails.)
 
 ## M1 Body mapping
-- [ ] From `make urdf` + renders, correct `ROLES` order and `POSES` signs in `app/body/behaviors.py`.
-- [ ] Check: in renders, IDLE is visibly slumped, ENGAGED upright and facing forward, THINKING looks up, LISTENING tilts. Every gesture reads clearly at its peak.
-- [ ] Shade link found by `sim.py` (name contains "shade", else fix the lookup).
+- [x] From `make urdf` + renders, correct `ROLES` order and `POSES` signs in `app/body/behaviors.py`.
+- [x] Check: in renders, IDLE is visibly slumped, ENGAGED upright and facing forward, THINKING looks up, LISTENING tilts. Every gesture reads clearly at its peak.
+- [x] Shade link found by `sim.py` (name contains "shade", else fix the lookup).
 - [ ] HUMAN: `make sweep` then `make poses` look right.
 
 ## M2 Engagement (HUMAN live)

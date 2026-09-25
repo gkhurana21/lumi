@@ -8,8 +8,8 @@ import struct
 import time
 
 CACHE = "build/sim"
-# Frames the whole lamp: about 0.8 m tall at rest, head reaching about 0.3 m forward.
-CAMERA = dict(cameraDistance=1.5, cameraYaw=45, cameraPitch=-15, cameraTargetPosition=[0.05, 0, 0.38])
+# Front three-quarter view of the whole lamp (it faces world -x, toward the user); about 0.8 m tall.
+CAMERA = dict(cameraDistance=1.5, cameraYaw=-60, cameraPitch=-15, cameraTargetPosition=[-0.1, 0, 0.38])
 
 
 def _binary_stl(src: str, dst: str) -> None:
@@ -49,6 +49,25 @@ def sim_urdf(urdf_path: str) -> str:
     return out
 
 
+def link_names(p, robot) -> list[str]:
+    return [p.getJointInfo(robot, i)[12].decode() for i in range(p.getNumJoints(robot))]
+
+
+def light_link(names: list[str]) -> int:
+    """Link to tint with the lamp light: the URDF's emitter ("light" in the name), else a "shade" link, else last."""
+    for key in ("light", "emitter", "shade"):
+        for i, n in enumerate(names):
+            if key in n.lower():
+                return i
+    return len(names) - 1
+
+
+def show_light(p, robot, link: int, light: dict) -> None:
+    r, g, b = light["rgb"]
+    k = 0.3 + 0.7 * light["brightness"]
+    p.changeVisualShape(robot, link, rgbaColor=[r * k, g * k, b * k, 1])
+
+
 def run_sim(q, urdf_path: str) -> None:
     import pybullet as p
 
@@ -58,14 +77,11 @@ def run_sim(q, urdf_path: str) -> None:
     robot = p.loadURDF(sim_urdf(urdf_path), useFixedBase=True)
     p.resetDebugVisualizerCamera(**CAMERA)
 
-    joints, shade = {}, -1
+    joints = {}  # name -> (index, max force, max velocity) from the URDF
     for i in range(p.getNumJoints(robot)):
         info = p.getJointInfo(robot, i)
-        joints[info[1].decode()] = i
-        if "shade" in info[12].decode().lower():
-            shade = i
-    if shade < 0:
-        shade = p.getNumJoints(robot) - 1
+        joints[info[1].decode()] = (i, info[10], info[11])
+    light = light_link(link_names(p, robot))
 
     while True:
         frame = None
@@ -77,10 +93,9 @@ def run_sim(q, urdf_path: str) -> None:
         if frame:
             for name, v in frame["joints"].items():
                 if name in joints:
-                    p.setJointMotorControl2(robot, joints[name], p.POSITION_CONTROL,
-                                            targetPosition=v, force=50, maxVelocity=4.0)
-            r, g, b = frame["light"]["rgb"]
-            k = 0.3 + 0.7 * frame["light"]["brightness"]
-            p.changeVisualShape(robot, shade, rgbaColor=[r * k, g * k, b * k, 1])
+                    i, force, vmax = joints[name]
+                    p.setJointMotorControl2(robot, i, p.POSITION_CONTROL,
+                                            targetPosition=v, force=force, maxVelocity=vmax)
+            show_light(p, robot, light, frame["light"])
         p.stepSimulation()
         time.sleep(1 / 240)

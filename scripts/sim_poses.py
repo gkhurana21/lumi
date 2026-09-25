@@ -15,7 +15,7 @@ import pybullet as p  # noqa: E402
 
 from app.body import behaviors  # noqa: E402
 from app.body.behaviors import GESTURES, Body  # noqa: E402
-from app.body.sim import CAMERA, sim_urdf  # noqa: E402
+from app.body.sim import CAMERA, light_link, link_names, show_light, sim_urdf  # noqa: E402
 from app.core.fsm import Affect, State  # noqa: E402
 
 ap = argparse.ArgumentParser()
@@ -29,6 +29,8 @@ p.connect(p.DIRECT if args.render else p.GUI)
 p.setGravity(0, 0, 0)
 robot = p.loadURDF(sim_urdf(urdf), useFixedBase=True)
 idx = {p.getJointInfo(robot, i)[1].decode(): i for i in range(p.getNumJoints(robot))}
+light = light_link(link_names(p, robot))
+print("light link:", link_names(p, robot)[light])
 
 
 class SimClock:
@@ -46,7 +48,7 @@ if args.render:
     behaviors.time = clock
 body = Body(urdf)
 CAM = CAMERA
-VIEWS = (45, 0)  # three-quarter and side view, side by side
+VIEWS = (CAM["cameraYaw"], 0)  # front three-quarter and side view (from the lamp's left), side by side
 if not args.render:
     p.resetDebugVisualizerCamera(**CAM)
 
@@ -55,6 +57,7 @@ def apply(frame):
     for name, v in frame["joints"].items():
         if name in idx:
             p.resetJointState(robot, idx[name], v)
+    show_light(p, robot, light, frame["light"])
 
 
 def snap(outdir, label):
@@ -88,6 +91,7 @@ def step(state):
 
 def settle(state, seconds):
     body.pos = {r: 0.0 for r in body.map}
+    body.out = {r: 0.0 for r in body.map}
     for _ in range(int(seconds * 20)):
         frame = step(state)
     apply(frame)
@@ -95,8 +99,9 @@ def settle(state, seconds):
 
 
 def gesture_peak(name):
-    """Settle ENGAGED, play the gesture, and return the frame where its joint deviates most."""
-    role, _, _, dur = GESTURES[name]
+    """Settle ENGAGED, play the gesture, and return the frame where its main joint deviates most."""
+    amps, _, _, dur = GESTURES[name]
+    role = max(amps, key=lambda r: abs(amps[r]))
     base = settle(State.ENGAGED, 3.0)
     joint = body.map[role][0] if role in body.map else None
     body.gesture(name)
@@ -106,17 +111,21 @@ def gesture_peak(name):
         d = abs(frame["joints"].get(joint, 0.0) - base["joints"].get(joint, 0.0))
         if d > best_d:
             best, best_d = frame, d
-    apply(best)
+    if args.render:
+        apply(best)
     return best, best_d
 
 
 if args.sweep:
     for name, i in idx.items():
-        if p.getJointInfo(robot, i)[2] == p.JOINT_FIXED:
+        info = p.getJointInfo(robot, i)
+        if info[2] == p.JOINT_FIXED:
             continue
-        print("sweeping", name)
-        for k in range(90):
-            p.resetJointState(robot, i, 0.6 * math.sin(2 * math.pi * k / 45))
+        lo, hi = info[8], info[9]
+        print(f"sweeping {name}: first toward + ({0.8 * hi:+.2f}), then toward - ({0.8 * lo:+.2f})")
+        for k in range(90):  # two cycles, 80% of the URDF range on each side
+            s = math.sin(2 * math.pi * k / 45)
+            p.resetJointState(robot, i, 0.8 * (hi if s > 0 else -lo) * s)
             time.sleep(1 / 30)
         p.resetJointState(robot, i, 0)
     sys.exit()
