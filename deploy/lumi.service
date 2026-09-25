@@ -1,0 +1,18 @@
+# systemd user service: starts Lumi with the desktop session, restarts it if it crashes.
+#   cp deploy/lumi.service ~/.config/systemd/user/ && systemctl --user daemon-reload
+#   systemctl --user enable --now lumi      # logs: journalctl --user -u lumi -f
+# The PyBullet window needs the graphical session (X11 or XWayland), hence graphical-session.target.
+# For a headless box, add Environment=SIM=false (the body still runs; only the window is skipped).
+[Unit]
+Description=Lumi live character lamp
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+WorkingDirectory=%h/lumi
+ExecStart=%h/lumi/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

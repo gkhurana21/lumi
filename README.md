@@ -4,16 +4,28 @@ A 5-DOF desk lamp character that notices you looking at it, greets you with moti
 
 ## Run
 
+**Target: Ubuntu 24.04 LTS** (4 cores, 8 GB, integrated GPU, no CUDA). Written for it but not yet run on a real Ubuntu machine; developed and measured on macOS (see Measurements).
+
 ```bash
-make install      # Python 3.11 venv (mediapipe needs <= 3.12), copies .env.example to .env
-                  # on macOS this first builds a patched pybullet (no arm64 wheel; ~2 min, see docs/DECISIONS.md)
-make fake         # offline, canned speech
-make run          # uses .env (PROVIDERS=cloud + keys for real speech)
+git clone <repo> ~/lumi && cd ~/lumi
+bash deploy/setup_ubuntu.sh   # apt packages, Chromium, venv on Python 3.12, pinned deps, tests, headless render
+# edit .env: PROVIDERS=cloud, ANTHROPIC_API_KEY, OPENAI_API_KEY   (PROVIDERS=fake needs no keys or network)
+make run                      # or run at login: deploy/lumi.service (systemd user unit, instructions inside)
 ```
 
-Open http://localhost:8000 in **Chrome**, press Start, allow camera + mic. The PyBullet window shows the body. Headphones are not needed (browser echo cancellation + VAD tightening while speaking), but they make barge-in more reliable.
+Open http://localhost:8000 in **Chromium or Chrome**, press Start, allow camera + mic. Camera and mic are read by the browser (V4L2, PipeWire/PulseAudio), so the Python side needs no audio or camera drivers. The PyBullet window shows the body; `SIM=false` skips it on a headless box. Headphones are not needed (browser echo cancellation plus a stricter VAD while the lamp speaks), but they make barge-in more reliable.
 
-`make test` runs unit tests plus a headless end-to-end WebSocket test with fake providers. `make urdf` and `make render` help map the body to the URDF.
+**macOS (development):** `make install` builds a patched pybullet first (no arm64 wheel; about 2 min), then the same commands.
+
+| Command | What it does |
+|---|---|
+| `make fake` / `make run` | server with canned providers (offline) / with `.env` |
+| `make test` / `make lint` | unit tests plus end-to-end WebSocket tests with fakes / ruff |
+| `make urdf` / `make render` | joint table and role mapping / headless PNGs of every pose in `out/poses/` |
+| `make sweep` / `make poses` | PyBullet window: each joint alone / every state and gesture |
+| `make trace` | summarize the last session: engagement latency, flapping, yaw spread, turn latency |
+| `make cloudcheck` | time each cloud call with synthetic inputs (needs keys) |
+| `make load` | CPU and memory under a client-like load with fake providers (`--sim` to include the window) |
 
 ## Architecture
 
@@ -87,12 +99,35 @@ The action set is closed (`look_at`, `light`, `observe`, `verify`, `return`), so
 
 | Loop | Target | How |
 |---|---|---|
-| Face notice / gaze follow | < 300 ms | local detector at 5 fps, latest-frame-wins, debounced |
+| Face notice | ~0.4 s | local detector at 5 fps (7 to 12 ms per frame), 2-frame debounce |
+| Engagement (attention confirmed, greeting starts) | < 1 s | 3-frame debounce with yaw hysteresis; greeting motion + chime 0.4 s before the voice |
 | End of speech -> first audio | ~1.5 to 2.5 s | 600 ms VAD hangover, small STT + Haiku-class LLM, streamed TTS |
-| Motion | 20 Hz targets, 240 Hz sim | smoothing rate scales with arousal |
+| Goal (aim, spotlight, re-check, outcome) | ~2.5 to 4 s | aim waits for velocity-limited joints (~0.8 s), then one cloud scene scan |
+| Motion | 20 Hz targets, 240 Hz sim | soft joint limits and URDF velocity limits enforced on every command |
 | Barge-in stop | < 200 ms | server purges queued audio, client stops sources |
 
 Filler motion (tilt, pulse, sfx) covers the language latency so the character never looks frozen.
+
+## Measurements
+
+Measured on the development machine (MacBook Air M3, 8 GB, macOS 26) unless noted. Live rows fill in from `make trace` after a real session.
+
+| What | Result | How |
+|---|---|---|
+| Server CPU under client-like load | 0.19 cores (2% of 8) | `make load`: 5 fps JPEG, 50 Hz mic chunks, a turn every 10 s, fake providers |
+| Server memory | 127 MB idle, 370 MB median, 484 MB peak | same run (MediaPipe + Chroma loaded) |
+| Sim loop (headless) | 0.03 cores, 42 MB | PyBullet DIRECT at 240 Hz with 20 Hz targets; the GUI window adds rendering on top |
+| Face detection per frame | 7 to 12 ms (first frame 23 ms after warm-up; 1115 ms before it existed) | session trace |
+| Memory search | 112 to 126 ms | Chroma, 3 objects, off the event loop |
+| Goal with fake providers | aim settled 0.83 s, verified 1.33 s | goal messages |
+| VAD end of utterance in steady noise | 0.1 to 0.35 s after speech, 10 of 10 noise conditions (was 3 of 10) | recorded utterance in white/pink/brown noise |
+| Engagement latency, flapping, disengagement | pending live session | `make trace` |
+| STT, LLM, first audio (median, p90) | pending keys | `make cloudcheck`, then 10 live turns |
+| Ubuntu target CPU/memory | pending (not run on Ubuntu yet) | `make load --sim` on the target |
+
+## Hardware used
+
+MacBook Air (Apple M3, 8 GB RAM, integrated GPU): built-in 720p camera, built-in microphones and speakers, Chrome. No external devices. The Ubuntu 24.04 target is supported by the setup script and service file but has not been run on real hardware.
 
 ## Cloud usage and data
 
@@ -107,16 +142,22 @@ Stays local: all continuous video for attention, continuous mic audio (VAD), the
 
 ## Decisions and trade-offs
 
+Full log with evidence: `docs/DECISIONS.md`.
+
 - **Local attention, cloud scene understanding.** Engagement must be fast and cheap, so it never waits on a network call; object naming tolerates seconds of latency.
-- **Nose-offset gaze heuristic** instead of a gaze model: robust enough at desk distance, zero training. Fails on strong side lighting or glasses glare.
-- **Turn-based STT** (VAD-segmented) instead of streaming STT: simpler and reliable in the timebox; costs ~300 to 600 ms.
-- **Tool-forced JSON** from the LLM so emotion/gesture/music are always parseable.
+- **Nose-offset gaze heuristic** instead of a gaze model: robust enough at desk distance, zero training. Fails on strong side lighting or glasses glare. Hysteresis (on below 0.25, off above 0.40) and debouncing keep it from flapping; attention is re-checked every frame so the lamp never stays engaged after you look away mid-reply.
+- **Turn-based STT** (VAD-segmented) instead of streaming STT: simpler and reliable in the timebox; costs ~300 to 600 ms. webrtcvad alone never closed utterances in steady room noise, so a frame must also beat the measured noise floor.
+- **Tool-forced JSON** from the LLM so emotion, gesture, music, and goals are always parseable.
+- **Models choose what, the body decides how.** Goals are a closed action set run by a local executor; models never command joints or timing.
+- **Physical limits in the body, not the sim.** Commands stay inside the URDF soft limits and under its velocity limits. The scaffold's gestures needed 3 to 6 rad/s against 0.95 to 1.6 rad/s limits and were retuned. There is no roll joint, so a head cock is neck yaw on the tilted upper arm with an opposite base yaw (18 deg roll, facing the user).
 - **Latest-location memory** keyed by object name: answers "where is X" well; loses location history.
 - **Synthesized SFX and music** in the browser: no licensing, tempo-locked to the dance.
-- **PyBullet in its own process**: GUI owns its main thread (macOS), and a sim crash can't take down the conversation.
+- **PyBullet in its own process**: GUI owns its main thread (macOS), and a sim crash can't take down the conversation. On a real lamp the same 20 Hz frame queue would feed a motor driver process instead.
 
 ## Completed vs left out
 
-Completed: engagement FSM with disengagement, affect layer, multimodal I/O over one socket, barge-in, scene memory with recency, procedural motion + light, SFX, music with dancing, offline fake mode, unit tests.
+Completed and tested offline (30 tests, fake providers): engagement FSM with disengagement and flapping guards, affect layer, multimodal I/O over one socket, barge-in, scene memory with recency, goal-directed action (spotlight or look at a named object, re-observe, re-aim once), procedural motion and light within joint limits, SFX, music with dancing, offline fake mode, Ubuntu setup script and systemd unit.
 
-Left out on purpose: streaming STT and sentence-level TTS pipelining, speaker identity, multi-person arbitration, object re-identification across renames, sound localization, learned gaze.
+Not yet verified live: engagement thresholds on a real face, cloud latency, barge-in on laptop speakers, the goal and memory moments with real vision, the Ubuntu install.
+
+Left out on purpose: streaming STT and sentence-level TTS pipelining, speaker identity, multi-person arbitration, object re-identification across renames, sound localization, learned gaze, visual servoing (the camera is the laptop's, not the lamp's `camera_link`, so aiming cannot be checked through the lamp's own view).

@@ -37,5 +37,7 @@ trace:
 	$(PY) scripts/analyze_trace.py
 cloudcheck:
 	$(PY) scripts/check_cloud.py
+load:
+	$(PY) scripts/measure_load.py
 
-.PHONY: install pybullet-mac run fake test lint urdf poses sweep render trace cloudcheck
+.PHONY: install pybullet-mac run fake test lint urdf poses sweep render trace cloudcheck load
