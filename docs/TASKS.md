@@ -31,6 +31,13 @@ Work top to bottom. A milestone is done only when its checks pass. Mark `[x]` as
 - [ ] HUMAN: show a mug, remove it, a minute later ask "where did I leave my mug?" Answer names the location and recency.
 - [ ] Repeat with 3 objects. Add a smoke test covering an object that is no longer in `scene_now`.
 
+## M5b Goal-directed action (from CHALLENGE.md, moment 5)
+- [ ] Action representation: a small closed set of lamp actions (e.g. look at a scene point, aim the light at an object, nod, return to user). Document the boundary: models choose from the set, the body owns kinematics, limits, and timing.
+- [ ] Spoken goal about the live scene (e.g. "shine your light on my mug") -> locate the object with vision -> plan a sequence of actions -> execute -> re-observe the scene -> confirm or retry once -> speak the outcome.
+- [ ] Keep invariant 3: cloud parses the goal and describes the scene; a local planner picks and runs the actions. If that proves insufficient, ask before changing the invariant.
+- [ ] Fake provider covers it; smoke test drives a goal end to end.
+- [ ] HUMAN: run one goal live.
+
 ## M6 Character pass
 - [ ] Walk the README demo script end to end. Every moment in the spec appears, plus motion, light, voice, one SFX, and music.
 - [ ] Greeting, SFX, and motion feel intentional together (timing, not just presence).
@@ -38,6 +45,9 @@ Work top to bottom. A milestone is done only when its checks pass. Mark `[x]` as
 ## M7 Submission
 - [ ] Fill the supplied `SUBMISSION.md`. README: measurements, hardware used, cloud data table accurate, completed vs left out.
 - [ ] `make test` and `make lint` green. Fresh clone + README instructions works.
+- [ ] Ubuntu 24.04 target (4 cores, 8 GB, no GPU): setup and run instructions, system packages, Python version (24.04 ships 3.12; Makefile hard-codes `python3.11`), headless sim option, audio and camera notes.
+- [ ] Measure CPU and memory during a full demo run; engagement reliability (false and missed engagements).
+- [ ] Technical note, at most 2 pages: architecture and data-flow diagram; protocol, model-to-action, simulation, deployment, key choices; reliability, latency, CPU and memory numbers; known limitations.
 
 ## Stretch (only after M7)
 - Sentence-level TTS pipelining. Streaming STT. Greeting that mentions a remembered object.
