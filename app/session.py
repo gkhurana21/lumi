@@ -152,6 +152,7 @@ class Session:
         t = m.get("type")
         if t == "playback_done":
             self.fsm.fire(Ev.TTS_DONE)
+            self._start_goal()
         elif t == "text" and m.get("text"):  # typed input for demos without a mic
             self.fsm.fire(Ev.SPEECH_START)
             self._pending = m["text"]
@@ -246,9 +247,9 @@ class Session:
             if prev == State.DISENGAGING:  # a glance that never engaged just settles back, no sleep sound
                 self._emit({"type": "sfx", "name": "sleep"})
             self._set_music("stop")
-        if nxt == State.ENGAGED and prev == State.SPEAKING and self._goal:
-            goal, self._goal = self._goal, None
-            self._goal_task = self._spawn(self._run_goal(goal))  # fires GOAL on the next loop turn, not re-entrantly
+        if prev == State.ACTING and ev == Ev.TIMEOUT:  # the goal ran out of time: say so with sound and motion
+            self._emit({"type": "sfx", "name": "error"})
+            self.body.gesture("shake")
 
         self._emit({"type": "state", "state": nxt.value, "prev": prev.value, "event": ev.value})
 
@@ -369,9 +370,15 @@ class Session:
             self._reply = asyncio.current_task()
             await self._speak(text, emotion)
 
+    def _start_goal(self) -> None:
+        """Right after the acknowledgement's TTS_DONE, with no await in between: a frame processed in a gap could
+        otherwise disengage the lamp (the user is looking at the target, not the lamp) and drop the goal."""
+        if self.fsm.state == State.ENGAGED and self._goal:
+            goal, self._goal = self._goal, None
+            if self.fsm.fire(Ev.GOAL):
+                self._goal_task = self._spawn(self._run_goal(goal))
+
     async def _run_goal(self, goal: dict) -> None:
-        if not self.fsm.fire(Ev.GOAL):
-            return
         do, want, t0 = goal["do"], goal["target"], time.perf_counter()
         self._goal_step("start", t0, do=do, target=want)
         try:
@@ -407,6 +414,8 @@ class Session:
             raise
         except Exception:
             log.exception("goal failed")
+            self._emit({"type": "sfx", "name": "error"})
+            self.fsm.affect.set_emotion("confused")
             self.fsm.fire(Ev.ABORT)
 
     # ---------- body clock ----------

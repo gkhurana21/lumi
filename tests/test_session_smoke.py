@@ -315,3 +315,37 @@ def test_greeting_voice_is_synthesized_before_it_is_needed(client, live, monkeyp
         _, seen = recv_until(ws, lambda d: d["type"] == "tts_end")
     greeting = [d["text"] for d in seen if d["type"] == "transcript" and d["role"] == "robot"][0]
     assert greeting in GREETINGS and sorted(calls) == sorted(GREETINGS)  # served from the cache, no new TTS call
+
+
+def test_looking_at_the_target_while_asking_still_runs_the_goal(client, live, monkeypatch):
+    monkeypatch.setattr(settings, "greet_cooldown_s", 1e12)
+    with client.websocket_connect("/ws") as ws:
+        frames(ws, b"look", 4)
+        recv_until(ws, is_state("engaged"), limit=60)
+        ws.send_text(json.dumps({"type": "text", "text": "shine your light on my mug"}))
+        recv_until(ws, lambda d: d["type"] == "tts_end")  # acknowledgement spoken
+        frames(ws, b"away", 7)  # the user looks at the mug: attention drops while the lamp is still speaking
+        ws.send_text(json.dumps({"type": "playback_done"}))
+        frames(ws, b"away", 2)
+        _, seen = recv_until(ws, lambda d: d["type"] == "goal" and d["step"] in ("done", "failed"), limit=100)
+    assert "acting" in [d["state"] for d in seen if d["type"] == "state"] and seen[-1]["step"] == "done"
+
+
+def test_a_failing_scene_scan_mid_goal_is_audible(client, live, monkeypatch):
+    from app.providers.fakes import FakeScene
+
+    calls = {"n": 0}
+
+    async def flaky(self, jpeg):
+        calls["n"] += 1
+        if calls["n"] > 1:
+            raise RuntimeError("vision API down")
+        return [MUG]
+
+    monkeypatch.setattr(FakeScene, "describe", flaky)
+    with client.websocket_connect("/ws") as ws:
+        ws.send_bytes(b"\x02frame")
+        recv_until(ws, lambda d: d["type"] == "scene")
+        say(ws, "shine your light on my mug")
+        _, seen = recv_until(ws, lambda d: d["type"] == "state" and d["prev"] == "acting", limit=100)
+    assert seen[-1]["state"] == "engaged" and "error" in [d["name"] for d in seen if d["type"] == "sfx"]
