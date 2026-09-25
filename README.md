@@ -56,18 +56,32 @@ stateDiagram-v2
   SPEAKING --> LISTENING: speech_start (barge-in)
   DISENGAGING --> ENGAGED: attn_on
   DISENGAGING --> IDLE: 5s
+  ENGAGED --> ACTING: goal (after the acknowledgement is spoken)
+  ACTING --> SPEAKING: reply_ready (outcome)
+  ACTING --> LISTENING: speech_start
+  ACTING --> ENGAGED: abort / 15s
 ```
 
 Engagement is discrete; emotion is a continuous valence/arousal vector layered on top. Each state has a baseline mood, perception events apply instant impulses (a face appearing spikes arousal before any model runs), and the LLM sets a held emotion that decays back to baseline. The body reads both, so "engaged + excited" moves faster and brighter than "engaged + sleepy".
+
+## Goal-directed action
+
+"Shine your light on my mug" goes through two layers with a hard boundary:
+
+- **Models choose what.** The LLM's structured reply carries `action: {do: spotlight | look, target: "<visible object name>"}` plus a short acknowledgement. The scene VLM reports each object's name, location, and image position.
+- **The body decides how, locally.** A planner in `Session._run_goal` finds the target (re-scanning if it is not in the current scene), aims head and light at its image position, waits until the joints have actually arrived (motion is velocity-limited), switches to a white spotlight, re-observes the scene, and verifies the target is still where it aimed. If it moved it re-aims once; if it is gone or never found, it says so. The outcome line is spoken with the light still on the target, then the lamp turns back to the user.
+
+The action set is closed (`look_at`, `light`, `observe`, `verify`, `return`), so a model can never command joint angles, speeds, or timing. Every step is sent to the client and the trace as a `goal` message with its time since the goal started.
 
 ## Demo script (one continuous take)
 
 1. **Idle**: lamp slumped, dim warm light, slow breathing. Scene scans are already filling memory.
 2. **Engagement**: look at the laptop. `notice` chirp, lamp perks up and turns toward your face. Attention confirmed: `greet` chime, bounce, light brightens, spoken greeting.
 3. **Spoken interaction**: "What's on my desk?" Listen blip, head tilt, thinking pulse, spoken answer grounded in the current scene.
-4. **Scene memory**: show a mug, then put it out of frame. Later: "Where did I leave my mug?" Answer comes from memory with recency ("left of the keyboard, 2 min ago").
-5. **Music**: "Play me something." Lamp says so, then generative music starts, lamp dances on tempo, light cycles colors. Music ducks while you talk.
-6. **Disengagement**: look away. Lamp lingers, droops, `sleep` sound, music stops, returns to idle.
+4. **Goal-directed action**: with a mug on the desk, "Shine your light on my mug." Short acknowledgement, the lamp leans over and aims at the mug, the light snaps to a white spotlight with a `spot` ding, it re-checks the scene (move the mug and it re-aims once), then "There! Your mug is in my spotlight."
+5. **Scene memory**: put the mug out of frame. Later: "Where did I leave my mug?" Answer comes from memory with recency ("left of the keyboard, 2 min ago").
+6. **Music**: "Play me something." Lamp says so, then generative music starts, lamp dances on tempo, light cycles colors. Music ducks while you talk.
+7. **Disengagement**: look away. Lamp lingers, droops, `sleep` sound, music stops, returns to idle.
 
 ## Real-time budget
 
@@ -86,7 +100,7 @@ Filler motion (tilt, pulse, sfx) covers the language latency so the character ne
 |---|---|---|---|
 | Utterance audio (WAV, only between VAD start/end) | OpenAI transcription | each turn | fast, accurate STT without a local model |
 | Transcript, short history, retrieved memories, mood | Anthropic LLM | each turn | character dialogue + structured emotion/gesture/music |
-| One JPEG every 4 s | Anthropic vision | continuously | object naming/locations for memory |
+| One JPEG every 4 s, plus one per goal re-observation | Anthropic vision | continuously; during goals | object names, locations, and image positions for memory and goal aiming |
 | Reply text | OpenAI TTS | each turn | expressive voice, streamed PCM |
 
 Stays local: all continuous video for attention, continuous mic audio (VAD), the state machine, memory store (Chroma on disk), motion, light, SFX, music, and the session trace (`out/traces/`, numbers only, used for the measurements). Every behavioral decision (when to engage, greet, listen, interrupt, sleep) is local; the cloud only supplies words and scene descriptions. `PROVIDERS=fake` sends nothing.

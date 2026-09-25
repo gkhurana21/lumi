@@ -41,7 +41,7 @@ class SceneMemory:
         return [f'{m["name"]} was {m["location"]} ({_ago(now - m["last_seen"])})' for m in res["metadatas"][0]]
 
 
-def _tokens(s: str) -> set[str]:
+def tokens(s: str) -> set[str]:
     return {w[:-1] if len(w) > 3 and w.endswith("s") else w for w in re.findall(r"[a-z0-9]+", s.lower())}
 
 
@@ -57,8 +57,8 @@ class InMemorySceneMemory:
                 self._objs[_slug(o["name"])] = {**o, "last_seen": ts}
 
     def search(self, query: str, k: int = 4) -> list[str]:
-        q = _tokens(query)
-        hits = [(len(q & _tokens(f'{o["name"]} {o.get("details", "")}')), o) for o in self._objs.values()]
+        q = tokens(query)
+        hits = [(len(q & tokens(f'{o["name"]} {o.get("details", "")}')), o) for o in self._objs.values()]
         hits = sorted((h for h in hits if h[0]), key=lambda h: (-h[0], -h[1]["last_seen"]))
         now = time.time()
         return [f'{o["name"]} was {o.get("location", "")} ({_ago(now - o["last_seen"])})' for _, o in hits[:k]]

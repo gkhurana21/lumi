@@ -122,3 +122,81 @@ def test_memory_answers_about_an_object_that_left_the_scene(client, monkeypatch)
         seen = say(ws, "where did I leave my mug?")
         robot = [d["text"] for d in seen if d["type"] == "transcript" and d["role"] == "robot"]
         assert robot and "mug" in robot[-1] and "left of the keyboard" in robot[-1]
+
+
+def scripted_scenes(monkeypatch, *scans):
+    """Each scene scan returns the next list; the last one repeats."""
+    from app.providers.fakes import FakeScene
+
+    it, last = iter(scans), {"v": scans[-1]}
+
+    async def describe(self, jpeg):
+        last["v"] = next(it, last["v"])
+        return last["v"]
+
+    monkeypatch.setattr(FakeScene, "describe", describe)
+
+
+def run_goal(ws, text):
+    """Ask for a goal, let the acknowledgement play, and collect everything until the outcome line is spoken."""
+    ws.send_bytes(b"\x02frame")  # gives the session a frame to re-observe
+    recv_until(ws, lambda d: d["type"] == "scene")
+    say(ws, text)  # acknowledgement, then playback_done -> ENGAGED -> GOAL
+    _, seen = recv_until(ws, lambda d: d["type"] == "tts_end")  # outcome line
+    ws.send_text(json.dumps({"type": "playback_done"}))
+    _, after = recv_until(ws, is_state("engaged"), limit=60)
+    return seen, after
+
+
+MUG = {"name": "mug", "location": "left of the keyboard", "x": -0.5, "y": 0.6}
+
+
+def test_goal_spotlights_the_mug_after_rechecking_the_scene(client, monkeypatch):
+    scripted_scenes(monkeypatch, [MUG, {"name": "notebook", "location": "front", "x": 0.5, "y": 0.7}])
+    with client.websocket_connect("/ws") as ws:
+        seen, after = run_goal(ws, "shine your light on my mug")
+    steps = [d["step"] for d in seen if d["type"] == "goal"]
+    assert steps == ["start", "aim", "observe", "verify", "done"]
+    assert [d["state"] for d in seen if d["type"] == "state"] == ["engaged", "acting", "speaking"]
+    assert "spot" in [d["name"] for d in seen if d["type"] == "sfx"]
+    lit = [d for d in seen if d["type"] == "body" and d["light"]["brightness"] == 1.0]
+    assert lit and lit[-1]["joints"]["base_yaw_joint"] > 0.05  # mug is image-left: lamp turns to its left
+    outcome = [d["text"] for d in seen if d["type"] == "transcript" and d["role"] == "robot"][-1]
+    assert "mug" in outcome and "spotlight" in outcome
+    bodies = [d for d in after if d["type"] == "body"]
+    assert not bodies or bodies[-1]["light"]["brightness"] < 1.0  # spotlight released once the outcome is spoken
+
+
+def test_goal_reaims_when_the_target_moved(client, monkeypatch):
+    moved = {**MUG, "x": 0.3}
+    scripted_scenes(monkeypatch, [MUG], [moved])
+    with client.websocket_connect("/ws") as ws:
+        seen, _ = run_goal(ws, "shine your light on my mug")
+    aims = [d["x"] for d in seen if d["type"] == "goal" and d["step"] == "aim"]
+    assert aims == [-0.5, 0.3]
+    last = [d for d in seen if d["type"] == "goal"][-1]
+    assert last["step"] == "done" and last["attempts"] == 2
+    assert "Caught it moving" in [d["text"] for d in seen if d["type"] == "transcript"][-1]
+
+
+def test_goal_reports_an_invisible_target(client, monkeypatch):
+    scripted_scenes(monkeypatch, [{"name": "notebook", "location": "front", "x": 0.5, "y": 0.7}])
+    with client.websocket_connect("/ws") as ws:
+        seen, _ = run_goal(ws, "shine your light on my phone")
+    goal = [d for d in seen if d["type"] == "goal"]
+    assert [d["step"] for d in goal] == ["start", "observe", "failed"] and goal[-1]["why"] == "not visible"
+    assert "phone" in [d["text"] for d in seen if d["type"] == "transcript"][-1]
+
+
+def test_talking_over_a_goal_cancels_it(client, monkeypatch):
+    scripted_scenes(monkeypatch, [MUG])
+    with client.websocket_connect("/ws") as ws:
+        ws.send_bytes(b"\x02frame")
+        recv_until(ws, lambda d: d["type"] == "scene")
+        say(ws, "shine your light on my mug")
+        recv_until(ws, is_state("acting"), limit=60)
+        ws.send_text(json.dumps({"type": "text", "text": "never mind"}))
+        _, seen = recv_until(ws, is_state("listening"), limit=60)
+        _, seen2 = recv_until(ws, lambda d: d["type"] == "tts_end")
+    goal_steps = [d["step"] for d in seen + seen2 if d["type"] == "goal"]
+    assert "done" not in goal_steps and "failed" not in goal_steps

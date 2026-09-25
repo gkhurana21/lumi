@@ -68,7 +68,7 @@ function stopVoice() { muted = true; sources.forEach(s => { try { s.stop(); } ca
 
 // ---- sound effects: [startHz, endHz, seconds] ----
 const SFX = {notice: [[500, 900, .12]], greet: [[523, 784, .09], [784, 1175, .14]], listen: [[880, 880, .05]],
-             sleep: [[700, 220, .6]], error: [[320, 180, .25]]};
+             sleep: [[700, 220, .6]], error: [[320, 180, .25]], spot: [[660, 1320, .08], [1320, 1320, .12]]};
 function sfx(name) {
   let t = out.currentTime;
   for (const [f0, f1, d] of SFX[name] || []) {
@@ -118,6 +118,7 @@ function onMsg(e) {
     case 'music': m.action === 'play' ? startMusic(m.mood, m.bpm) : stopMusic(); log(`music: ${m.action} ${m.mood || ''}`); break;
     case 'transcript': log(`${m.role}: ${m.text}${m.emotion ? `  [${m.emotion}]` : ''}`); break;
     case 'scene': log('scene: ' + m.objects.map(o => o.name).join(', ')); break;
+    case 'goal': log(`goal ${m.step} +${m.ms} ms ${m.target || m.why || ''}`); break;
     case 'body': { $('mood').textContent = `${m.mood} ${m.va.join(',')}`;
       const [r, g, b] = m.light.rgb.map(c => Math.round(c * 255 * (.3 + .7 * m.light.brightness)));
       $('light').style.background = $('light').style.color = `rgb(${r},${g},${b})`; break; }

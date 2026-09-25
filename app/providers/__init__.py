@@ -18,11 +18,13 @@ class TTS(Protocol):
 
 class LLM(Protocol):
     async def respond(self, *, user_text: str, history: list[dict], memories: list[str],
-                      scene: list[dict], mood: str) -> dict[str, Any]: ...  # {"say","emotion","gesture"}
+                      scene: list[dict], mood: str) -> dict[str, Any]: ...
+    # {"say", "emotion", "gesture", "music", optional "action": {"do": "spotlight"|"look"|"none", "target"}}
 
 
 class SceneVLM(Protocol):
-    async def describe(self, jpeg: bytes) -> list[dict]: ...  # [{"name","location","details"}]
+    async def describe(self, jpeg: bytes) -> list[dict]: ...
+    # [{"name", "location", "details", "x", "y"}], x/y = object center in [-1, 1], camera frame (not mirrored)
 
 
 @dataclass

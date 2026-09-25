@@ -63,3 +63,17 @@ def test_attention_hysteresis_and_debounce():
     assert evs[-1] == [Ev.ATTN_OFF] and not any(evs[:-1]) and not a.attending
     evs = [a.decide(Reading(face=True, yaw=0.3)) for _ in range(5)]
     assert not any(evs)  # 0.3 no longer counts once attention is off
+
+
+def test_goal_acts_then_speaks_the_outcome():
+    m = Machine()
+    run(m, Ev.FACE_SEEN, Ev.ATTN_ON, Ev.GOAL, Ev.REPLY_READY, Ev.TTS_DONE)
+    assert m.state == State.ENGAGED
+    run(m, Ev.GOAL, Ev.SPEECH_START)  # talking over the lamp cancels the goal
+    assert m.state == State.LISTENING
+    m2 = Machine()
+    run(m2, Ev.FACE_SEEN, Ev.ATTN_ON, Ev.GOAL)
+    assert not m2.fire(Ev.ATTN_OFF)  # looking at the target instead of the lamp does not abort the goal
+    m2.entered -= TIMEOUTS[State.ACTING] + 0.1
+    m2.tick(0.05)
+    assert m2.state == State.ENGAGED

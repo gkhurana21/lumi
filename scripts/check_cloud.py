@@ -35,6 +35,7 @@ async def main() -> None:
     jpeg = cv2.imencode(".jpg", cv2.imread(IMAGE), [cv2.IMWRITE_JPEG_QUALITY, 70])[1].tobytes()
     stt, llm, tts, scene = OpenAISTT(), ClaudeLLM(), OpenAITTS(), ClaudeScene()
     t = {"stt": [], "llm": [], "tts_first": [], "scene": []}
+    positions: dict[str, list[tuple[float, float]]] = {}
     for i in range(RUNS):
         t0 = time.perf_counter()
         text = await stt.transcribe(pcm)
@@ -50,12 +51,27 @@ async def main() -> None:
         t0 = time.perf_counter()
         objs = await scene.describe(jpeg)
         t["scene"].append((time.perf_counter() - t0) * 1000)
+        for o in objs:
+            if "x" in o:
+                positions.setdefault(o["name"], []).append((o["x"], o["y"]))
         if i == 0:
             print(f"transcript: {text!r}\nreply: {reply}\nscene: {[o['name'] for o in objs]}\n")
     for k, xs in t.items():
         print(f"{k:10s} {stats(xs)}   (n={len(xs)})")
     total = [a + b + c for a, b, c in zip(t["stt"], t["llm"], t["tts_first"], strict=True)]
     print(f"{'sum':10s} {stats(total)}   stt + llm + first TTS audio; add ~0.6 s VAD hangover for end-of-speech")
+
+    print("\nscene position jitter on an identical image (calibrates MOVE_TOL in app/session.py):")
+    for name, ps in positions.items():
+        if len(ps) > 1:
+            cx, cy = st.mean(p[0] for p in ps), st.mean(p[1] for p in ps)
+            worst = max(((x - cx) ** 2 + (y - cy) ** 2) ** 0.5 for x, y in ps)
+            print(f"  {name:20s} seen {len(ps)}/{RUNS}  center ({cx:+.2f}, {cy:+.2f})  max drift {worst:.3f}")
+
+    scene_now = [{"name": "desk lamp", "location": "center of the frame", "x": 0.0, "y": 0.1}]
+    reply = await llm.respond(user_text="Can you shine your light on the desk lamp?", history=[], memories=[],
+                              scene=scene_now, mood="curious")
+    print(f"\ngoal request -> action {reply.get('action')}  say {reply['say']!r}")
 
 
 asyncio.run(main())

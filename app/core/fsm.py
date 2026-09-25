@@ -21,6 +21,7 @@ class State(str, Enum):
     THINKING = "thinking"        # STT + LLM in flight, looks up/away, light pulses
     SPEAKING = "speaking"        # TTS playing, bobs with speech, faces user
     DISENGAGING = "disengaging"  # user looked away or left, lingers before sleeping
+    ACTING = "acting"            # executing a spoken goal on the scene (aim, light, re-observe, verify)
 
 
 class Ev(str, Enum):
@@ -33,6 +34,7 @@ class Ev(str, Enum):
     REPLY_READY = "reply_ready"
     TTS_DONE = "tts_done"
     ABORT = "abort"      # empty transcript, API error
+    GOAL = "goal"        # the reply carried a goal and its acknowledgement has been spoken
     TIMEOUT = "timeout"  # fired by tick() using TIMEOUTS
 
 
@@ -62,6 +64,11 @@ TRANSITIONS: dict[tuple[State, Ev], State] = {
     (S.DISENGAGING, E.ATTN_ON): S.ENGAGED,
     (S.DISENGAGING, E.SPEECH_START): S.LISTENING,
     (S.DISENGAGING, E.TIMEOUT): S.IDLE,
+    (S.ENGAGED, E.GOAL): S.ACTING,
+    (S.ACTING, E.REPLY_READY): S.SPEAKING,      # outcome is spoken with the light still on the target
+    (S.ACTING, E.SPEECH_START): S.LISTENING,    # interrupting cancels the goal
+    (S.ACTING, E.ABORT): S.ENGAGED,
+    (S.ACTING, E.TIMEOUT): S.ENGAGED,
 }
 
 TIMEOUTS: dict[State, float] = {
@@ -70,6 +77,7 @@ TIMEOUTS: dict[State, float] = {
     S.THINKING: 10.0,
     S.SPEAKING: 30.0,
     S.DISENGAGING: 5.0,
+    S.ACTING: 15.0,  # aim (~1 s) + up to two re-observations (cloud scan ~1 to 3 s each)
 }
 
 # (valence, arousal), both in [-1, 1]
@@ -95,6 +103,7 @@ STATE_BASELINE: dict[State, tuple[float, float]] = {
     S.THINKING: (0.1, 0.2),
     S.SPEAKING: (0.3, 0.3),
     S.DISENGAGING: (-0.1, -0.2),
+    S.ACTING: (0.3, 0.4),
 }
 
 # Perception events nudge affect instantly so the lamp reacts before any LLM call

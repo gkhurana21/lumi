@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import os
 import random
 import time
@@ -14,6 +15,7 @@ from .audio.vad import VAD
 from .body.behaviors import Body
 from .config import settings
 from .core.fsm import Ev, Machine, State
+from .mind.memory import tokens
 from .protocol import Frame, pack
 from .providers import Providers
 
@@ -21,6 +23,16 @@ log = logging.getLogger("session")
 
 GREETINGS = ["Oh! Hi there.", "Hey, you! I was hoping you'd look over.", "Hello hello!"]
 MUSIC_BPM = {"happy": 112, "chill": 84}
+SPOT_RGB = [1.0, 0.97, 0.9]  # near-white spotlight for goals
+MOVE_TOL = 0.25  # image units ([-1, 1] per axis): larger shift between aim and re-observation = the object moved
+AIM_TIMEOUT_S = 2.5
+
+
+def find_object(objects: list[dict], name: str) -> dict | None:
+    """Best token match for a goal target among scene objects ("mug" matches "white mug")."""
+    want = tokens(name)
+    best = max(objects, key=lambda o: len(want & tokens(o.get("name", ""))), default=None)
+    return best if best and want & tokens(best.get("name", "")) else None
 
 
 class Session:
@@ -48,6 +60,10 @@ class Session:
         self._last_greet = -1e9
         self._bg: set[asyncio.Task] = set()
         self._t_end: float | None = None  # perf_counter at end of user speech, for latency metrics
+        self._last_jpeg: bytes | None = None
+        self._goal: dict | None = None  # goal from the last reply, run after its acknowledgement is spoken
+        self._goal_task: asyncio.Task | None = None
+        self._look: tuple[float, float] | None = None  # goal target overriding face gaze (camera frame, [-1, 1])
         self._trace_f = None
         if settings.trace_dir:
             os.makedirs(settings.trace_dir, exist_ok=True)
@@ -142,6 +158,7 @@ class Session:
 
     async def _on_video(self, jpeg: bytes) -> None:
         try:
+            self._last_jpeg = jpeg
             t0 = time.perf_counter()
             events, reading = await asyncio.to_thread(self.attn.update, jpeg)
             self._trace("frame", face=reading.face, attending=reading.attending, yaw=round(reading.yaw, 3),
@@ -164,20 +181,38 @@ class Session:
         finally:
             self._vision_busy = False
 
-    async def _scan_scene(self, jpeg: bytes) -> None:
+    async def _scan_scene(self, jpeg: bytes) -> list[dict]:
         try:
             objs = await self.p.scene.describe(jpeg)
             if objs:
                 self.scene_now = objs
                 await asyncio.to_thread(self.memory.upsert_objects, objs, time.time())
                 self._emit({"type": "scene", "objects": objs})
+            return objs
         finally:
             self._scene_busy = False
+
+    async def _observe(self) -> list[dict]:
+        """Fresh scan of the latest frame for a goal, bypassing the periodic interval (waits out one in flight)."""
+        for _ in range(100):
+            if not self._scene_busy:
+                break
+            await asyncio.sleep(0.05)
+        if self._last_jpeg is None:  # no camera frames (typed-input demo): best effort
+            return self.scene_now
+        self._scene_busy, self._last_scene = True, time.monotonic()
+        return await self._scan_scene(self._last_jpeg)
 
     # ---------- state machine side effects ----------
     def _on_transition(self, prev: State, nxt: State, ev: Ev) -> None:
         log.info("%s -> %s (%s)", prev.value, nxt.value, ev.value)
         self._trace("transition", prev=prev.value, next=nxt.value, event=ev.value)
+        if prev == State.ACTING and nxt != State.SPEAKING:
+            self._cancel(self._goal_task)  # interrupted or timed out mid-goal
+        if nxt not in (State.ACTING, State.SPEAKING):  # the goal's aim and spotlight last through its outcome line
+            self._look, self.body.light_override = None, None
+        if nxt in (State.LISTENING, State.DISENGAGING, State.IDLE):
+            self._goal = None
         if prev in (State.THINKING, State.SPEAKING) and nxt != State.SPEAKING:
             self._cancel_reply()
             if prev == State.SPEAKING and ev != Ev.TTS_DONE:
@@ -205,12 +240,19 @@ class Session:
         elif nxt == State.IDLE:
             self._emit({"type": "sfx", "name": "sleep"})
             self._set_music("stop")
+        if nxt == State.ENGAGED and prev == State.SPEAKING and self._goal:
+            goal, self._goal = self._goal, None
+            self._goal_task = self._spawn(self._run_goal(goal))  # fires GOAL on the next loop turn, not re-entrantly
 
         self._emit({"type": "state", "state": nxt.value, "prev": prev.value, "event": ev.value})
 
     def _cancel_reply(self) -> None:
-        if self._reply and not self._reply.done() and self._reply is not asyncio.current_task():
-            self._reply.cancel()
+        self._cancel(self._reply)
+
+    @staticmethod
+    def _cancel(task: asyncio.Task | None) -> None:
+        if task and not task.done() and task is not asyncio.current_task():
+            task.cancel()
 
     def _set_music(self, mood: str) -> None:
         if mood in MUSIC_BPM:
@@ -249,6 +291,9 @@ class Session:
             self.fsm.affect.set_emotion(emotion)
             if reply.get("gesture", "none") != "none":
                 self.body.gesture(reply["gesture"])
+            action = reply.get("action") or {}
+            if action.get("do") in ("spotlight", "look") and str(action.get("target", "")).strip():
+                self._goal = {"do": action["do"], "target": str(action["target"]).strip()}
             music = reply.get("music", "none")
             if music == "stop":
                 self._set_music("stop")
@@ -279,13 +324,76 @@ class Session:
             await self.out.put(pack(Frame.AUDIO_OUT, chunk))
         self._emit({"type": "tts_end"})  # client replies playback_done when the speaker is actually quiet
 
+    # ---------- goals: local planner + executor ----------
+    # The model chose only {do, target}. Finding the target, aiming, lighting, re-observing, verifying,
+    # retrying, and the outcome all happen here, bounded by the ACTING timeout.
+    def _goal_step(self, step: str, t0: float, **info) -> None:
+        rec = {"step": step, "ms": round((time.perf_counter() - t0) * 1000), **info}
+        self._trace("goal", **rec)
+        self._emit({"type": "goal", **rec})
+
+    async def _aim(self, obj: dict) -> None:
+        self._look = (float(obj["x"]), float(obj["y"]))
+        await asyncio.sleep(0.15)  # let the 20 Hz body pick up the new target before polling
+        deadline = time.monotonic() + AIM_TIMEOUT_S
+        while not self.body.settled and time.monotonic() < deadline:
+            await asyncio.sleep(0.05)
+
+    async def _goal_outcome(self, text: str, emotion: str, gesture: str) -> None:
+        self.fsm.affect.set_emotion(emotion)
+        self.body.gesture(gesture)
+        if self.fsm.fire(Ev.REPLY_READY):
+            self._reply = asyncio.current_task()
+            await self._speak(text, emotion)
+
+    async def _run_goal(self, goal: dict) -> None:
+        if not self.fsm.fire(Ev.GOAL):
+            return
+        do, want, t0 = goal["do"], goal["target"], time.perf_counter()
+        self._goal_step("start", t0, do=do, target=want)
+        try:
+            obj = find_object(self.scene_now, want)
+            if obj is None or "x" not in obj:
+                self._goal_step("observe", t0, why="not in the current scene")
+                obj = find_object(await self._observe(), want)
+            if obj is None or "x" not in obj:
+                self._goal_step("failed", t0, why="not visible")
+                return await self._goal_outcome(f"Hmm, I can't spot your {want} right now.", "confused", "shake")
+            for attempt in range(2):
+                self._goal_step("aim", t0, target=obj["name"], x=obj["x"], y=obj["y"])
+                await self._aim(obj)
+                if do == "spotlight" and self.body.light_override is None:
+                    self.body.light_override = (SPOT_RGB, 1.0)
+                    self._emit({"type": "sfx", "name": "spot"})
+                self._goal_step("observe", t0, why="verify")
+                seen = find_object(await self._observe(), want)
+                if seen is None or "x" not in seen:
+                    self._goal_step("failed", t0, why="lost after aiming")
+                    return await self._goal_outcome(f"Huh, your {want} vanished on me.", "surprised", "shake")
+                moved = math.hypot(seen["x"] - obj["x"], seen["y"] - obj["y"])
+                self._goal_step("verify", t0, moved=round(moved, 3))
+                if moved <= MOVE_TOL:
+                    self._goal_step("done", t0, attempts=attempt + 1)
+                    text = (f"There! Your {seen['name']} is in my spotlight." if do == "spotlight"
+                            else f"There's your {seen['name']}.")
+                    return await self._goal_outcome(("Caught it moving. " if attempt else "") + text, "happy", "nod")
+                obj = seen  # it moved: re-aim once at the new position
+            self._goal_step("failed", t0, why="kept moving")
+            await self._goal_outcome(f"Your {want} won't sit still!", "confused", "tilt")
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("goal failed")
+            self.fsm.fire(Ev.ABORT)
+
     # ---------- body clock ----------
     async def _ticker(self) -> None:
         dt, n = 0.05, 0
         while True:
             await asyncio.sleep(dt)
             self.fsm.tick(dt)
-            frame = self.body.update(self.fsm.state, self.fsm.affect, self._gaze, dt)
+            look = self._look if self._look is not None else self._gaze
+            frame = self.body.update(self.fsm.state, self.fsm.affect, look, dt)
             n += 1
             if n % 4 == 0:  # 5 Hz to the UI, 20 Hz to the sim
                 a = self.fsm.affect

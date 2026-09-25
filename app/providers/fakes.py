@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 
 import numpy as np
 
@@ -15,6 +16,13 @@ class FakeLLM:
     async def respond(self, *, user_text, history, memories, scene, mood):
         await asyncio.sleep(0.4)
         t = user_text.lower()
+        if any(w in t for w in ("shine", "spotlight", "light on", "look at")):
+            names = [o["name"] for o in scene if o["name"].lower() in t]
+            m = re.search(r"\bmy (\w+)", t)
+            target = names[0] if names else (m.group(1) if m else "")
+            do = "look" if "look at" in t else "spotlight"
+            return {"say": "On it!", "emotion": "excited", "gesture": "perk", "music": "none",
+                    "action": {"do": do, "target": target}}
         if "music" in t or "song" in t:
             return {"say": "Ooh, dance break!", "emotion": "excited", "gesture": "bounce", "music": "happy"}
         if "stop" in t:
@@ -28,8 +36,8 @@ class FakeLLM:
 class FakeScene:
     async def describe(self, jpeg: bytes):
         await asyncio.sleep(0.5)
-        return [{"name": "mug", "location": "left of the keyboard", "details": "white ceramic"},
-                {"name": "notebook", "location": "front right", "details": "open"}]
+        return [{"name": "mug", "location": "left of the keyboard", "details": "white ceramic", "x": -0.5, "y": 0.6},
+                {"name": "notebook", "location": "front right", "details": "open", "x": 0.55, "y": 0.7}]
 
 
 class FakeTTS:

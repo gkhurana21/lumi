@@ -32,10 +32,10 @@ Work top to bottom. A milestone is done only when its checks pass. Mark `[x]` as
 - [ ] Repeat with 3 objects. Add a smoke test covering an object that is no longer in `scene_now`.
 
 ## M5b Goal-directed action (from CHALLENGE.md, moment 5)
-- [ ] Action representation: a small closed set of lamp actions (e.g. look at a scene point, aim the light at an object, nod, return to user). Document the boundary: models choose from the set, the body owns kinematics, limits, and timing.
-- [ ] Spoken goal about the live scene (e.g. "shine your light on my mug") -> locate the object with vision -> plan a sequence of actions -> execute -> re-observe the scene -> confirm or retry once -> speak the outcome.
-- [ ] Keep invariant 3: cloud parses the goal and describes the scene; a local planner picks and runs the actions. If that proves insufficient, ask before changing the invariant.
-- [ ] Fake provider covers it; smoke test drives a goal end to end.
+- [x] Action representation: a small closed set of lamp actions (e.g. look at a scene point, aim the light at an object, nod, return to user). Document the boundary: models choose from the set, the body owns kinematics, limits, and timing.
+- [x] Spoken goal about the live scene (e.g. "shine your light on my mug") -> locate the object with vision -> plan a sequence of actions -> execute -> re-observe the scene -> confirm or retry once -> speak the outcome.
+- [x] Keep invariant 3: cloud parses the goal and describes the scene; a local planner picks and runs the actions. If that proves insufficient, ask before changing the invariant.
+- [x] Fake provider covers it; smoke test drives a goal end to end.
 - [ ] HUMAN: run one goal live.
 
 ## M6 Character pass

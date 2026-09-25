@@ -29,8 +29,11 @@ POSES: dict[State, dict[str, float]] = {
     State.THINKING: dict(shoulder=0.20, elbow=-0.45, base_yaw=-0.35, neck_yaw=-0.25, head_pitch=-0.75),  # up, away
     State.SPEAKING: dict(shoulder=0.10, elbow=-0.70, head_pitch=-0.65),
     State.DISENGAGING: dict(shoulder=0.20, elbow=-1.15, head_pitch=-0.35),  # sagging, head lowering
+    State.ACTING: dict(shoulder=-0.20, elbow=-0.85, head_pitch=-0.70),  # leans in over the desk, head 0.35 rad down
 }
-LOOKING = {State.NOTICING, State.ENGAGED, State.LISTENING, State.SPEAKING}
+# States whose head follows a look point: the user's face, or the goal target while ACTING.
+LOOKING = {State.NOTICING, State.ENGAGED, State.LISTENING, State.SPEAKING, State.ACTING}
+SETTLED_TOL = 0.08  # rad; above the breathing overlay (<= 0.06), so "arrived" means the pose, not the sway
 
 # name -> ({role: amplitude}, shape, freq Hz, duration s), all under a sin(pi*t/dur) envelope.
 # Shapes: "osc" swings +-A (peak speed 2*pi*f*A), "dip" goes 0..A and back (pi*f*A), "hold" rises to A once (pi*A/dur).
@@ -79,6 +82,13 @@ class Body:
         self.t0 = time.monotonic()
         self._gest: tuple[str, float] | None = None
         self.dance_bpm: float | None = None  # set while music plays
+        self.light_override: tuple[list[float], float] | None = None  # (rgb, brightness), e.g. a goal spotlight
+        self._want = {r: 0.0 for r in self.map}  # clamped pose target from the last update
+
+    @property
+    def settled(self) -> bool:
+        """True once every joint command is within SETTLED_TOL of its pose target (motion is velocity-limited)."""
+        return all(abs(self.out[r] - self._want[r]) < SETTLED_TOL for r in self.map)
 
     def gesture(self, name: str) -> None:
         if name in GESTURES:
@@ -132,6 +142,7 @@ class Body:
         a = 1 - math.exp(-self.k * (0.6 + 0.8 * ar) * dt)  # excited = snappier
         overlay = self._overlay(state, ar, now)
         for r, (_name, lo, hi, vmax) in self.map.items():
+            self._want[r] = max(lo, min(hi, tgt[r]))
             self.pos[r] = max(lo, min(hi, self.pos[r] + (tgt[r] - self.pos[r]) * a))
             want = max(lo, min(hi, self.pos[r] + overlay[r]))
             step = 0.95 * vmax * dt  # never command faster than the joint can move
@@ -145,6 +156,8 @@ class Body:
         if self.dance_bpm:  # color cycles on the beat
             ph = 2 * math.pi * self.dance_bpm / 60 * t / 4
             rgb = [round(0.6 + 0.4 * math.sin(ph + o), 3) for o in (0, 2.1, 4.2)]
+        if self.light_override:
+            rgb, bright = list(self.light_override[0]), self.light_override[1]
 
         frame = {"joints": {self.map[r][0]: round(v, 4) for r, v in self.out.items()},
                  "light": {"rgb": rgb, "brightness": round(bright, 3)}}
