@@ -60,7 +60,6 @@ TRANSITIONS: dict[tuple[State, Ev], State] = {
     (S.SPEAKING, E.ABORT): S.ENGAGED,
     (S.SPEAKING, E.TIMEOUT): S.ENGAGED,         # safety net if client never reports playback_done
     (S.DISENGAGING, E.ATTN_ON): S.ENGAGED,
-    (S.DISENGAGING, E.FACE_SEEN): S.ENGAGED,
     (S.DISENGAGING, E.SPEECH_START): S.LISTENING,
     (S.DISENGAGING, E.TIMEOUT): S.IDLE,
 }

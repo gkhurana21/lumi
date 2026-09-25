@@ -54,7 +54,7 @@ stateDiagram-v2
   THINKING --> LISTENING: speech_start
   SPEAKING --> ENGAGED: tts_done
   SPEAKING --> LISTENING: speech_start (barge-in)
-  DISENGAGING --> ENGAGED: attn_on / face_seen
+  DISENGAGING --> ENGAGED: attn_on
   DISENGAGING --> IDLE: 5s
 ```
 
@@ -89,7 +89,7 @@ Filler motion (tilt, pulse, sfx) covers the language latency so the character ne
 | One JPEG every 4 s | Anthropic vision | continuously | object naming/locations for memory |
 | Reply text | OpenAI TTS | each turn | expressive voice, streamed PCM |
 
-Stays local: all continuous video for attention, continuous mic audio (VAD), the state machine, memory store (Chroma on disk), motion, light, SFX, music. Every behavioral decision (when to engage, greet, listen, interrupt, sleep) is local; the cloud only supplies words and scene descriptions. `PROVIDERS=fake` sends nothing.
+Stays local: all continuous video for attention, continuous mic audio (VAD), the state machine, memory store (Chroma on disk), motion, light, SFX, music, and the session trace (`out/traces/`, numbers only, used for the measurements). Every behavioral decision (when to engage, greet, listen, interrupt, sleep) is local; the cloud only supplies words and scene descriptions. `PROVIDERS=fake` sends nothing.
 
 ## Decisions and trade-offs
 

@@ -38,3 +38,13 @@ Append one entry per decision or measurement. Format: date, decision, why, evide
 - Light: `sim.py` looked for "shade" in link names and fell back to `speaker_link` (no visual). Now `light_link` prefers "light"/"emitter", so it tints `light_emitter_link`. Evidence: sim loop run headless in a thread; emitter rgba (0.93, 0.67, 0.39) for warm light at brightness 0.9; joints tracked commands within 0.02 rad after 3 s.
 - Camera: front three-quarter view, yaw -60 (the lamp faces -x), plus a side view (yaw 0) in renders.
 - `make sweep` now sweeps each joint over 80% of its URDF range; before it used +-0.6 rad, past the elbow's +0.30 upper limit.
+
+## 2026-09-25 M2 engagement prep (before live testing)
+
+- M1 GUI check (`make sweep`, `make poses`) not yet reported by the user; folded into the M2 live session.
+- Bug: ENGAGED could get stuck with nobody looking. Attention events fire only on change, and the FSM drops `ATTN_OFF` in SPEAKING/THINKING. Look away during a reply, then `TTS_DONE` returns to ENGAGED with attention already off and no new `ATTN_OFF` coming. Fix: after each frame, if ENGAGED and debounced attention is off, fire `ATTN_OFF` (level check in `Session._on_video`; `NullAttention.attending = None` means unknown, never forces it). Smoke test reproduces the sequence over the real WebSocket; it fails without the fix.
+- Bug: `DISENGAGING + FACE_SEEN -> ENGAGED` re-engaged on a visible but not-looking face (e.g. a 45 deg glance), which hit the stuck state above. Removed; re-engagement comes from `ATTN_ON`. README state diagram updated.
+- Attention hysteresis: attending starts below |yaw| 0.25 and ends above 0.40 (was one 0.25 threshold). Starting values, to be tuned from live traces.
+- MediaPipe first use costs 1115 ms (model load) and ran on the first real frame. Now warmed in a thread at session start. Measured on this Mac (M3) with the fake server: first frame 23 ms, then 6.6 to 12 ms per 640x480 frame; body updates held 9 of 10 expected during warm-up.
+- Session trace: `out/traces/<time>.jsonl` with per-frame attention numbers (face, yaw, box, processing ms), transitions, and turn latency. Numbers only, never images or audio; stays on disk. `make trace` summarizes the latest: engagement and disengagement latency, re-engagements (flapping), |yaw| spread, frame processing, turn latency. Set `TRACE_DIR=` to disable.
+- Expected engagement latency from the design: 3 attending frames at 5 fps = 400 to 600 ms after the first attending frame, plus up to 200 ms capture interval and processing. Target under 1 s.

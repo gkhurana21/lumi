@@ -29,5 +29,7 @@ sweep:
 	$(PY) scripts/sim_poses.py --sweep
 render:
 	$(PY) scripts/sim_poses.py --render out/poses
+trace:
+	$(PY) scripts/analyze_trace.py
 
-.PHONY: install pybullet-mac run fake test lint urdf poses sweep render
+.PHONY: install pybullet-mac run fake test lint urdf poses sweep render trace

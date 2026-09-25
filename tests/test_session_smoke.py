@@ -1,5 +1,6 @@
 """End-to-end over the real WebSocket with fake providers: no keys, camera, mic, or sim."""
 import json
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,6 +11,7 @@ from app.config import settings
 @pytest.fixture
 def client():
     settings.providers, settings.memory, settings.attention, settings.sim = "fake", "inmem", "none", False
+    settings.trace_dir = ""
     from app.main import app
     with TestClient(app) as c:
         yield c
@@ -49,3 +51,51 @@ def test_scene_memory_answers_later(client):
         seen = say(ws, "where is my mug?")
         robot = [d["text"] for d in seen if d["type"] == "transcript" and d["role"] == "robot"]
         assert robot and "mug" in robot[-1] and "keyboard" in robot[-1]
+
+
+class _ScriptedAttention:
+    """Real decide() (hysteresis + debounce); readings scripted by the frame payload instead of MediaPipe."""
+    READINGS = {b"look": dict(face=True, yaw=0.0, w=0.2), b"away": dict(face=True, yaw=0.6, w=0.2)}
+
+    @classmethod
+    def make(cls):
+        from app.vision.attention import AttentionTracker
+        from app.vision.types import Reading
+
+        class Scripted(AttentionTracker):
+            def read(self, jpeg):
+                return Reading(**cls.READINGS.get(jpeg, {}))
+        return Scripted
+
+
+def frames(ws, what: bytes, n: int) -> None:
+    for _ in range(n):
+        ws.send_bytes(b"\x02" + what)
+        time.sleep(0.04)  # the server drops frames that arrive while one is being processed
+
+
+def is_state(name):
+    return lambda d: d["type"] == "state" and d["state"] == name
+
+
+def test_engagement_greets_then_disengages_even_if_look_away_lands_mid_speech(client, monkeypatch):
+    from app.core.fsm import TIMEOUTS, State
+
+    monkeypatch.setattr(settings, "attention", "mediapipe")
+    monkeypatch.setattr("app.vision.attention.AttentionTracker", _ScriptedAttention.make())
+    monkeypatch.setitem(TIMEOUTS, State.DISENGAGING, 0.5)
+    with client.websocket_connect("/ws") as ws:
+        frames(ws, b"look", 4)
+        _, seen = recv_until(ws, lambda d: d["type"] == "tts_end")  # greeting spoken
+        states = [d["state"] for d in seen if d["type"] == "state"]
+        assert states[:3] == ["noticing", "engaged", "speaking"]
+        assert [d["name"] for d in seen if d["type"] == "sfx"][:2] == ["notice", "greet"]
+
+        frames(ws, b"away", 8)  # attention drops while the lamp is still speaking: ATTN_OFF is ignored there
+        ws.send_text(json.dumps({"type": "playback_done"}))
+        recv_until(ws, is_state("engaged"), limit=60)
+        frames(ws, b"away", 1)  # level check: back in ENGAGED with attention off -> disengage
+        _, seen2 = recv_until(ws, is_state("disengaging"), limit=60)
+        _, seen3 = recv_until(ws, is_state("idle"), limit=60)
+        sfx = [d["name"] for d in seen + seen2 + seen3 if d["type"] == "sfx"]
+        assert sfx.count("greet") == 1 and sfx[-1] == "sleep"

@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import random
 import time
 
@@ -47,6 +48,11 @@ class Session:
         self._last_greet = -1e9
         self._bg: set[asyncio.Task] = set()
         self._t_end: float | None = None  # perf_counter at end of user speech, for latency metrics
+        self._trace_f = None
+        if settings.trace_dir:
+            os.makedirs(settings.trace_dir, exist_ok=True)
+            path = os.path.join(settings.trace_dir, time.strftime("%Y%m%d-%H%M%S") + ".jsonl")
+            self._trace_f = open(path, "a", buffering=1)  # line-buffered; ~150 B at 5 Hz, negligible on the loop
 
     # ---------- plumbing ----------
     def _spawn(self, coro) -> asyncio.Task:
@@ -59,6 +65,11 @@ class Session:
         self._bg.discard(t)
         if not t.cancelled() and t.exception():
             log.error("task failed", exc_info=t.exception())
+
+    def _trace(self, kind: str, **rec) -> None:
+        """Local measurement log (numbers only, never images or audio). Read by scripts/analyze_trace.py."""
+        if self._trace_f:
+            self._trace_f.write(json.dumps({"t": round(time.monotonic(), 3), "kind": kind, **rec}) + "\n")
 
     def _emit(self, obj: dict) -> None:
         try:
@@ -86,6 +97,8 @@ class Session:
     async def run(self) -> None:
         self._spawn(self._sender())
         self._spawn(self._ticker())
+        if hasattr(self.attn, "warm"):
+            self._spawn(asyncio.to_thread(self.attn.warm))
         try:
             while True:
                 msg = await self.ws.receive()
@@ -104,6 +117,8 @@ class Session:
         finally:
             for t in list(self._bg):
                 t.cancel()
+            if self._trace_f:
+                self._trace_f.close()
 
     # ---------- inputs ----------
     def _on_audio(self, pcm: bytes) -> None:
@@ -127,11 +142,19 @@ class Session:
 
     async def _on_video(self, jpeg: bytes) -> None:
         try:
+            t0 = time.perf_counter()
             events, reading = await asyncio.to_thread(self.attn.update, jpeg)
+            self._trace("frame", face=reading.face, attending=reading.attending, yaw=round(reading.yaw, 3),
+                        x=round(reading.x, 3), y=round(reading.y, 3), w=round(reading.w, 3),
+                        level=self.attn.attending, ms=round((time.perf_counter() - t0) * 1000, 1))
             if reading.face:
                 self._gaze = (reading.x, reading.y)
             for ev in events:
                 self.fsm.fire(ev)
+            # Edge events fired while SPEAKING/THINKING are dropped by the FSM, so re-check the level:
+            # never sit in ENGAGED while debounced attention is off (None = no camera, unknown).
+            if self.fsm.state == State.ENGAGED and self.attn.attending is False:
+                self.fsm.fire(Ev.ATTN_OFF)
             now = time.monotonic()
             if (not self._scene_busy and now - self._last_scene > settings.scene_interval_s
                     and self.fsm.state != State.SPEAKING):
@@ -154,6 +177,7 @@ class Session:
     # ---------- state machine side effects ----------
     def _on_transition(self, prev: State, nxt: State, ev: Ev) -> None:
         log.info("%s -> %s (%s)", prev.value, nxt.value, ev.value)
+        self._trace("transition", prev=prev.value, next=nxt.value, event=ev.value)
         if prev in (State.THINKING, State.SPEAKING) and nxt != State.SPEAKING:
             self._cancel_reply()
             if prev == State.SPEAKING and ev != Ev.TTS_DONE:
@@ -249,6 +273,7 @@ class Session:
                 marks["first_audio_ms"] = (time.perf_counter() - t0) * 1000
                 marks = {k: round(v) for k, v in marks.items()}
                 log.info("latency %s", marks)
+                self._trace("metrics", **marks)
                 self._emit({"type": "metrics", **marks})
             first = False
             await self.out.put(pack(Frame.AUDIO_OUT, chunk))

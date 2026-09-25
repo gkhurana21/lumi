@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     memory_path: str = "data/chroma"
     attention: str = "mediapipe"    # "mediapipe" | "none" (headless tests)
     sim: bool = True
+    trace_dir: str = "out/traces"  # per-session JSONL of attention readings + transitions (local); "" = off
 
 
 settings = Settings()
