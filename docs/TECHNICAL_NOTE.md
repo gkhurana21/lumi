@@ -5,13 +5,14 @@ Lumi is a live character around the supplied 5-DOF lamp. The laptop camera and m
 ## Architecture and data flow
 
 ```
- Browser (I/O only)             Python server: all decisions                               Body process
- camera 5 fps JPEG ─┐          ┌ AttentionTracker (MediaPipe, local) ─ face / attention ─┐
- mic 16 kHz PCM ────┼─ one ────┼ VAD (webrtcvad + noise floor, local) ─ speech start/end ┤
-                    │  WebSocket│                                                         ▼
- speaker, SFX, <────┘          │ scene VLM (cloud, every 4 s) ─> SceneMemory      FSM + Affect ─> Body (20 Hz) ─ queue ─> PyBullet
- music, UI                     │ STT (cloud) ─> LLM (cloud, tool JSON) ─> TTS (cloud)     │          joints + light    (GUI, 240 Hz)
-                               └ goal executor (local) <─ {do, target} + object positions ┘
+Browser (I/O only) ── one WebSocket ── Python server (all behavioral decisions)
+
+camera JPEG 5 fps ──┐     local  AttentionTracker (MediaPipe) ──┐
+mic PCM 16 kHz    ──┤     local  VAD (webrtcvad + noise floor) ─┴──> FSM + Affect ──> Body 20 Hz
+                    ├─────cloud  STT -> LLM (tool JSON) -> TTS <─────┤ turns          │ queue
+voice PCM 24 kHz <──┤     cloud  scene VLM every 4 s -> memory <─────┤ memory         ▼
+SFX, music, UI <────┘     local  goal executor <- {do, target} <─────┘ goals   PyBullet 240 Hz
+                                                                               (joints + light)
 ```
 
 **Protocol.** One WebSocket per interaction. Binary frames are `[kind byte][payload]`: mic PCM16 16 kHz in 20 ms chunks, camera JPEG, and TTS PCM16 24 kHz out. Control is JSON text (`state`, `transcript`, `scene`, `body`, `sfx`, `music`, `goal`, `tts_start/end`, `stop_audio`; client sends `playback_done` and typed text). Ordered delivery makes barge-in simple: the server purges queued audio and tells the client to stop. The browser owns capture and playback, so the server needs no audio or camera drivers; SFX and music are synthesized in the browser, tempo-locked to the dance.
