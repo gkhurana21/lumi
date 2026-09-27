@@ -161,10 +161,11 @@ def test_goal_spotlights_the_mug_after_rechecking_the_scene(client, monkeypatch)
     assert "spot" in [d["name"] for d in seen if d["type"] == "sfx"]
     lit = [d for d in seen if d["type"] == "body" and d["light"]["brightness"] == 1.0]
     assert lit and lit[-1]["joints"]["base_yaw_joint"] > 0.05  # mug is image-left: lamp turns to its left
+    assert lit[-1].get("focus") == "mug"  # the sim labels the lit spot with the target's name
     outcome = [d["text"] for d in seen if d["type"] == "transcript" and d["role"] == "robot"][-1]
     assert "mug" in outcome and "spotlight" in outcome
     bodies = [d for d in after if d["type"] == "body"]
-    assert not bodies or bodies[-1]["light"]["brightness"] < 1.0  # spotlight released once the outcome is spoken
+    assert not bodies or (bodies[-1]["light"]["brightness"] < 1.0 and "focus" not in bodies[-1])  # released
 
 
 def test_goal_reaims_when_the_target_moved(client, monkeypatch):

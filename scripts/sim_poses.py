@@ -15,7 +15,7 @@ import pybullet as p  # noqa: E402
 
 from app.body import behaviors  # noqa: E402
 from app.body.behaviors import GESTURES, Body  # noqa: E402
-from app.body.sim import CAMERA, light_link, link_names, show_light, sim_urdf  # noqa: E402
+from app.body.sim import BACKGROUND, CAMERA, LightViz, light_link, link_names, show_light, sim_urdf  # noqa: E402
 from app.core.fsm import Affect, State  # noqa: E402
 
 ap = argparse.ArgumentParser()
@@ -31,6 +31,7 @@ robot = p.loadURDF(sim_urdf(urdf), useFixedBase=True)
 idx = {p.getJointInfo(robot, i)[1].decode(): i for i in range(p.getNumJoints(robot))}
 light = light_link(link_names(p, robot))
 print("light link:", link_names(p, robot)[light])
+viz = LightViz(p, robot, light, beam=not args.render)  # TinyRenderer has no transparency: pool only in PNGs
 
 
 class SimClock:
@@ -51,6 +52,7 @@ CAM = CAMERA
 VIEWS = (CAM["cameraYaw"], 0)  # front three-quarter and side view (from the lamp's left), side by side
 if not args.render:
     p.resetDebugVisualizerCamera(**CAM)
+    p.configureDebugVisualizer(rgbBackground=BACKGROUND)
 
 
 def apply(frame):
@@ -58,6 +60,7 @@ def apply(frame):
         if name in idx:
             p.resetJointState(robot, idx[name], v)
     show_light(p, robot, light, frame["light"])
+    viz.update(frame["light"])
 
 
 def snap(outdir, label):
@@ -68,7 +71,8 @@ def snap(outdir, label):
     for yaw in VIEWS:
         view = p.computeViewMatrixFromYawPitchRoll(CAM["cameraTargetPosition"], CAM["cameraDistance"],
                                                    yaw, CAM["cameraPitch"], 0, 2)
-        _, _, rgba, _, _ = p.getCameraImage(640, 480, view, proj, renderer=p.ER_TINY_RENDERER)
+        _, _, rgba, _, _ = p.getCameraImage(640, 480, view, proj, renderer=p.ER_TINY_RENDERER, shadow=1,
+                                            lightDirection=[-1, 1, 3])
         # rgba is a flat tuple when pybullet is built without numpy; make a contiguous uint8 BGR image.
         rgb = np.asarray(rgba, dtype=np.uint8).reshape(480, 640, 4)[:, :, :3]
         panel = np.ascontiguousarray(rgb[:, :, ::-1])

@@ -15,3 +15,4 @@ def pack(kind: Frame, payload: bytes) -> bytes:
 # client -> server: {"type":"playback_done"} | {"type":"text","text":"..."} (typed input, bypasses STT)
 # server -> client: state | transcript | scene | body | sfx | music | tts_start | tts_end | stop_audio | goal
 # goal: {step: start|observe|aim|verify|done|failed, ms since goal start, ...step details}
+# body: {joints, light: {rgb, brightness}, mood, va, focus?: name of the goal target while aiming}

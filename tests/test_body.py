@@ -58,7 +58,7 @@ def test_pose_intent():
         assert abs(_elevation(POSES[s])) < 0.1  # level, toward the user
     assert _elevation(POSES[State.THINKING]) > 0.3  # looks up
     assert POSES[State.THINKING].get("base_yaw", 0) != 0  # and away
-    assert -0.6 < _elevation(POSES[State.ACTING]) < -0.2  # leans over the desk to aim at objects
+    assert -0.8 < _elevation(POSES[State.ACTING]) < -0.4  # leans over the desk to aim at objects
 
 
 def test_commands_respect_soft_and_velocity_limits():

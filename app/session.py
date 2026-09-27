@@ -215,7 +215,7 @@ class Session:
         if prev == State.ACTING and nxt != State.SPEAKING:
             self._cancel(self._goal_task)  # interrupted or timed out mid-goal
         if nxt not in (State.ACTING, State.SPEAKING):  # the goal's aim and spotlight last through its outcome line
-            self._look, self.body.light_override = None, None
+            self._look, self.body.light_override, self.body.focus = None, None, None
         if nxt in (State.LISTENING, State.DISENGAGING, State.IDLE):
             self._goal = None
         if prev in (State.THINKING, State.SPEAKING) and nxt != State.SPEAKING:
@@ -359,7 +359,7 @@ class Session:
         self._emit({"type": "goal", **rec})
 
     async def _aim(self, obj: dict) -> None:
-        self._look = (float(obj["x"]), float(obj["y"]))
+        self._look, self.body.focus = (float(obj["x"]), float(obj["y"])), obj["name"]
         await asyncio.sleep(0.15)  # let the 20 Hz body pick up the new target before polling
         deadline = time.monotonic() + AIM_TIMEOUT_S
         while not self.body.settled and time.monotonic() < deadline:

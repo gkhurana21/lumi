@@ -29,7 +29,7 @@ POSES: dict[State, dict[str, float]] = {
     State.THINKING: dict(shoulder=0.20, elbow=-0.45, base_yaw=-0.35, neck_yaw=-0.25, head_pitch=-0.75),  # up, away
     State.SPEAKING: dict(shoulder=0.10, elbow=-0.70, head_pitch=-0.65),
     State.DISENGAGING: dict(shoulder=0.20, elbow=-1.15, head_pitch=-0.35),  # sagging, head lowering
-    State.ACTING: dict(shoulder=-0.20, elbow=-0.85, head_pitch=-0.70),  # leans in over the desk, head 0.35 rad down
+    State.ACTING: dict(shoulder=-0.30, elbow=-0.90, head_pitch=-0.60),  # leans over the desk, head 0.6 rad down
 }
 # States whose head follows a look point: the user's face, or the goal target while ACTING.
 LOOKING = {State.NOTICING, State.ENGAGED, State.LISTENING, State.SPEAKING, State.ACTING}
@@ -83,6 +83,7 @@ class Body:
         self._gest: tuple[str, float] | None = None
         self.dance_bpm: float | None = None  # set while music plays
         self.light_override: tuple[list[float], float] | None = None  # (rgb, brightness), e.g. a goal spotlight
+        self.focus: str | None = None  # name of what the lamp is aiming at during a goal (display only)
         self._want = {r: 0.0 for r in self.map}  # clamped pose target from the last update
 
     @property
@@ -161,6 +162,8 @@ class Body:
 
         frame = {"joints": {self.map[r][0]: round(v, 4) for r, v in self.out.items()},
                  "light": {"rgb": rgb, "brightness": round(bright, 3)}}
+        if self.focus:
+            frame["focus"] = self.focus
         if self.sim_q is not None:
             try:
                 self.sim_q.put_nowait(frame)

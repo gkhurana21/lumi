@@ -123,3 +123,9 @@ Append one entry per decision or measurement. Format: date, decision, why, evide
 
 - Submitted on the user's timeline before any live session or API keys. Rows that need a person, keys, or the Ubuntu machine say "not measured" with the command that measures them, instead of "pending". HUMAN boxes in `docs/TASKS.md` stay unticked.
 - `docs/TECHNICAL_NOTE.pdf` generated from the markdown (headless Chrome, A4): 2 pages.
+
+## 2026-09-27 Visible light (sim rendering)
+
+- The light only tinted a 3 cm emitter sphere inside the shade, so one of the five required channels was barely visible. `LightViz` in `sim.py` (rendering only) now draws a desk, a short translucent glow along the head's axis when it faces forward, and, when the head points down within reach, a spotlight cone that lands on a lit pool on the desk (4 prebuilt cone lengths; the shortest that reaches is shown and the desk hides the rest). Color and alpha follow the body's light output with the emitter's dimming. During a goal the body frame carries `focus` (the target's name), drawn as a label over the pool.
+- ACTING now leans further and looks 0.6 rad down (was 0.35) so a desk object lands 0.5 m in front of the lamp instead of about 1 m, which is plausible for a mug between the user and the laptop and keeps the pool in frame. Measured reach: mug at image left 0.53 m, notebook at image right 0.51 m.
+- Camera 1.3 m, front three-quarter, framing the lamp and the desk in front of it; dark background (0.07, 0.07, 0.09) so the light reads as light. Checked with OpenGL snapshots from the GUI camera for engaged, spotlight goal, dance, and idle. Headless PNGs (TinyRenderer, no transparency) show the pool only, now with shadows.
