@@ -1,6 +1,12 @@
 # Lumi: live character lamp
 
-A 5-DOF desk lamp character that notices you looking at it, greets you with motion, light, a chirp and voice, holds a spoken conversation, remembers objects it sees on your desk, and plays (and dances to) music.
+A 5-DOF desk lamp character that notices you looking at it, greets you with motion, light, a chirp and voice, holds a spoken conversation, remembers objects it sees on your desk, shines its light on them when asked, and plays (and dances to) music.
+
+![The simulated lamp: idle, engaged, spotlighting a mug, dancing](docs/img/lamp_states.png)
+
+Every behavior is decided locally in one Python process; the cloud only supplies words and scene descriptions. The browser dashboard shows what the lamp sees and feels while it runs:
+
+![Dashboard during a goal: face view, scene memory with the target highlighted, goal steps with timings, light, mood, conversation](docs/img/dashboard.png)
 
 ## Run
 
@@ -13,7 +19,7 @@ bash deploy/setup_ubuntu.sh   # apt packages, Chromium, venv on Python 3.12, pin
 make run                      # or run at login: deploy/lumi.service (systemd user unit, instructions inside)
 ```
 
-Open http://localhost:8000 in **Chromium or Chrome**, press Start, allow camera + mic. Camera and mic are read by the browser (V4L2, PipeWire/PulseAudio), so the Python side needs no audio or camera drivers. The PyBullet window shows the body; `SIM=false` skips it on a headless box. Headphones are not needed (browser echo cancellation plus a stricter VAD while the lamp speaks), but they make barge-in more reliable.
+Open http://localhost:8000 in **Chromium or Chrome**, press Start, allow camera + mic. Put the dashboard and the PyBullet window side by side. Camera and mic are read by the browser (V4L2, PipeWire/PulseAudio), so the Python side needs no audio or camera drivers. The PyBullet window shows the body; `SIM=false` skips it on a headless box. Headphones are not needed (browser echo cancellation plus a stricter VAD while the lamp speaks), but they make barge-in more reliable.
 
 **macOS (development):** `make install` builds a patched pybullet first (no arm64 wheel; about 2 min), then the same commands.
 
@@ -85,7 +91,9 @@ Engagement is discrete; emotion is a continuous valence/arousal vector layered o
 
 The action set is closed (`look_at`, `light`, `observe`, `verify`, `return`), so a model can never command joint angles, speeds, or timing. Every step is sent to the client and the trace as a `goal` message with its time since the goal started.
 
-## Demo script (one continuous take)
+## Demo script (one continuous take, about 3 minutes)
+
+Record the screen with the dashboard on one side and the PyBullet window on the other, sound on. Sit at normal laptop distance with a mug on the desk in view of the camera. Each step below is one shot of the same take.
 
 1. **Idle**: lamp slumped, dim warm light, slow breathing. Scene scans are already filling memory.
 2. **Engagement**: look at the laptop. `notice` chirp, lamp perks up and turns toward your face. Attention confirmed: `greet` chime, bounce, light brightens, spoken greeting.
@@ -94,6 +102,8 @@ The action set is closed (`look_at`, `light`, `observe`, `verify`, `return`), so
 5. **Scene memory**: put the mug out of frame. Later: "Where did I leave my mug?" Answer comes from memory with recency ("left of the keyboard, 2 min ago").
 6. **Music**: "Play me something." Lamp says so, then generative music starts, lamp dances on tempo, light cycles colors. Music ducks while you talk.
 7. **Disengagement**: look away. Lamp lingers, droops, `sleep` sound, music stops, returns to idle.
+
+What each moment shows on screen: the dashboard's face box turns green and the state badge follows the FSM; the light orb and the PyBullet glow change with mood; the goal stepper fills in with real timings while the spotlight lands on the desk under a "mug" label; the event log shows every transition, sound, and latency.
 
 ## Real-time budget
 
