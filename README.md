@@ -25,7 +25,7 @@ Open http://localhost:8000 in **Chromium or Chrome**, press Start, allow camera 
 | `make sweep` / `make poses` | PyBullet window: each joint alone / every state and gesture |
 | `make trace` | summarize the last session: engagement latency, flapping, yaw spread, turn latency |
 | `make cloudcheck` | time each cloud call with synthetic inputs (needs keys) |
-| `make load` | CPU and memory under a client-like load with fake providers (`--sim` to include the window) |
+| `make load` | CPU and memory under a client-like load with fake providers (`python scripts/measure_load.py 30 --sim` includes the window) |
 
 ## Architecture
 
@@ -110,7 +110,7 @@ Filler motion (tilt, pulse, sfx) covers the language latency so the character ne
 
 ## Measurements
 
-Measured on the development machine (MacBook Air M3, 8 GB, macOS 26) unless noted. Live rows fill in from `make trace` after a real session.
+Measured on the development machine (MacBook Air M3, 8 GB, macOS 26). Rows marked *not measured* need a person at the camera, API keys, or the Ubuntu machine; the command that measures each is listed.
 
 | What | Result | How |
 |---|---|---|
@@ -121,9 +121,9 @@ Measured on the development machine (MacBook Air M3, 8 GB, macOS 26) unless note
 | Memory search | 112 to 126 ms | Chroma, 3 objects, off the event loop |
 | Goal with fake providers | aim settled 0.83 s, verified 1.33 s | goal messages |
 | VAD end of utterance in steady noise | 0.1 to 0.35 s after speech, 10 of 10 noise conditions (was 3 of 10) | recorded utterance in white/pink/brown noise |
-| Engagement latency, flapping, disengagement | pending live session | `make trace` |
-| STT, LLM, first audio (median, p90) | pending keys | `make cloudcheck`, then 10 live turns |
-| Ubuntu target CPU/memory | pending (not run on Ubuntu yet) | `make load --sim` on the target |
+| Engagement latency, flapping, disengagement | *not measured live*; by design ~0.4 s from the first attending frame to the greeting chime (scripted 5 fps frames) | `make fake`, use it, then `make trace` |
+| STT, LLM, first audio (median, p90) | *not measured* (no API keys used yet) | `make cloudcheck`; `make run` then `make trace` for live turns |
+| Ubuntu target CPU/memory | *not measured* (not run on Ubuntu) | `python scripts/measure_load.py 30 --sim` on the target |
 
 ## Hardware used
 

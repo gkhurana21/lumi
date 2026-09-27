@@ -118,3 +118,8 @@ Append one entry per decision or measurement. Format: date, decision, why, evide
 - Evidence: the 10 noise conditions plus the quiet speaker keep identical start and end times. An 8 s beeping appliance, the lamp's music, and the fake TTS babble opened a turn at 0.10 to 0.26 s that never closed; now none opens. Speech over the music opened at 0.10 s (the music) before; now at 2.30 s, when the speech starts. Session test: streaming beeps over the WebSocket leaves the lamp idle with no listen blip (fails with the gate disabled).
 - Consequence for testing: the fake TTS babble can no longer cause a false barge-in through the speakers, so the M4 echo check needs real TTS (keys session). The user's own barge-in is unaffected.
 - Remaining limitation: harmonic-rich non-speech (a TV or radio voice, songs with vocals) still passes, as does whistling. `min_peaks=0` disables the gate.
+
+## 2026-09-27 Submitted without the live session
+
+- Submitted on the user's timeline before any live session or API keys. Rows that need a person, keys, or the Ubuntu machine say "not measured" with the command that measures them, instead of "pending". HUMAN boxes in `docs/TASKS.md` stay unticked.
+- `docs/TECHNICAL_NOTE.pdf` generated from the markdown (headless Chrome, A4): 2 pages.

@@ -31,4 +31,4 @@ launch interface are candidate decisions.
 
 1. **Source code with dependency declarations:** `app/` (server), `client/index.html` (browser I/O), `scripts/` (tools), `tests/`; `requirements.txt` (pinned direct dependencies) and `constraints.txt` (full pinned set).
 2. **Setup and run instructions for Ubuntu 24.04:** `README.md` (Run), `deploy/setup_ubuntu.sh`, `deploy/lumi.service`.
-3. **Technical note (at most 2 pages):** `docs/TECHNICAL_NOTE.md`. Longer rationale in `README.md`; every decision and measurement with evidence in `docs/DECISIONS.md`.
+3. **Technical note (at most 2 pages):** `docs/TECHNICAL_NOTE.pdf` (source `docs/TECHNICAL_NOTE.md`). Longer rationale in `README.md`; every decision and measurement with evidence in `docs/DECISIONS.md`.
