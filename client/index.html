@@ -1,26 +1,92 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>Lumi</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lumi</title>
 <style>
-body{font:14px system-ui;margin:20px;display:grid;grid-template-columns:480px 1fr;gap:20px;background:#111;color:#ddd}
-video{width:480px;border-radius:8px;background:#000;transform:scaleX(-1)}
-#log{height:520px;overflow:auto;border:1px solid #333;border-radius:8px;padding:8px;font:12px ui-monospace,monospace}
-.pill{display:inline-block;padding:4px 10px;border-radius:99px;background:#222;margin-right:6px}
-#light{width:60px;height:60px;border-radius:50%;display:inline-block;vertical-align:middle;box-shadow:0 0 30px currentColor}
-button,input{font:inherit;padding:6px 10px;border-radius:6px;border:1px solid #444;background:#1c1c1c;color:#ddd}
+:root{--bg:#0d0e12;--panel:#15171e;--line:#252834;--text:#e6e7eb;--dim:#8b90a0;--accent:#5b6170;--glow:#000}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+header{display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--line)}
+h1{font-size:18px;margin:0;letter-spacing:.02em}
+h1 small{color:var(--dim);font-weight:400;margin-left:8px}
+button,input{font:inherit;color:var(--text);background:#1c1f28;border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+button{cursor:pointer}button.primary{background:#f5c451;color:#15120a;border:0;font-weight:600}
+main{display:grid;grid-template-columns:minmax(300px,440px) 1fr;gap:16px;padding:16px 20px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+.panel h2{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin:0 0 10px;font-weight:600}
+.eyes{position:relative;aspect-ratio:4/3;border-radius:10px;overflow:hidden;background:#000}
+.eyes video,.eyes canvas{position:absolute;inset:0;width:100%;height:100%}
+.eyes video{transform:scaleX(-1);object-fit:cover;opacity:.85}
+.seeing{position:absolute;left:10px;bottom:10px;padding:3px 10px;border-radius:99px;background:#000a;font-size:12px}
+.meter{height:6px;border-radius:3px;background:#222633;margin-top:10px;overflow:hidden}
+.meter i{display:block;height:100%;width:0;background:linear-gradient(90deg,#4ade80,#f5c451,#f87171);transition:width 60ms}
+.row{display:flex;gap:16px;align-items:center}
+.orb{width:84px;height:84px;border-radius:50%;flex:none;background:var(--glow);box-shadow:0 0 36px 6px var(--glow);transition:background .15s,box-shadow .15s}
+.state{font-size:26px;font-weight:700;color:var(--accent);text-transform:capitalize;transition:color .2s}
+.caption{color:var(--dim);font-size:13px}
+.pad{position:relative;width:110px;height:110px;flex:none;border:1px solid var(--line);border-radius:10px;background:
+  linear-gradient(var(--line),var(--line)) 50% 0/1px 100% no-repeat,linear-gradient(90deg,var(--line),var(--line)) 0 50%/100% 1px no-repeat}
+.pad i{position:absolute;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:#f5c451;box-shadow:0 0 12px #f5c451;transition:left .2s,top .2s}
+.pad span{position:absolute;font-size:10px;color:var(--dim)}
+.steps{display:flex;gap:6px;flex-wrap:wrap}
+.steps span{padding:4px 10px;border-radius:99px;background:#1c1f28;color:var(--dim);font-size:12px}
+.steps span.on{background:#f5c451;color:#15120a}.steps span.bad{background:#f87171;color:#1a0a0a}
+.chips{display:flex;gap:6px;flex-wrap:wrap;min-height:28px}
+.chips span{padding:4px 10px;border-radius:8px;background:#1c1f28;font-size:12px}
+.chips span.focus{background:#fff4d6;color:#15120a;box-shadow:0 0 14px #f5c45180}
+.chat{display:flex;flex-direction:column;gap:8px;height:280px;overflow-y:auto;padding-right:4px}
+.b{max-width:82%;padding:8px 12px;border-radius:14px;background:#1c1f28}
+.b.user{align-self:flex-end;background:#243049}.b small{display:block;color:var(--dim);font-size:11px;margin-top:2px}
+.say{display:flex;gap:8px;margin-top:10px}.say input{flex:1}
+details{margin-top:12px}summary{color:var(--dim);cursor:pointer;font-size:12px}
+#log{height:160px;overflow:auto;font:11px ui-monospace,monospace;color:var(--dim);margin-top:6px}
+.grid2{display:grid;gap:16px}
+@media (max-width:900px){main{grid-template-columns:1fr}}
 </style></head>
 <body>
-<div>
-  <video id="v" autoplay muted playsinline></video>
-  <p><button id="go">Start</button> <span class="pill" id="st">offline</span><span class="pill" id="mood">-</span><span id="light"></span></p>
-  <p><input id="txt" placeholder="type instead of speaking" size="36"> <button id="send">Send</button></p>
-</div>
-<div id="log"></div>
+<header><h1>Lumi <small>live character lamp</small></h1><span style="flex:1"></span>
+  <button id="go" class="primary">Start</button></header>
+<main>
+  <div class="grid2">
+    <section class="panel"><h2>What Lumi sees</h2>
+      <div class="eyes"><video id="v" autoplay muted playsinline></video><canvas id="ov"></canvas>
+        <span class="seeing" id="seeing">camera off</span></div>
+      <div class="meter" title="microphone level"><i id="lvl"></i></div>
+    </section>
+    <section class="panel"><h2>Scene memory</h2><div class="chips" id="scene"><span>nothing seen yet</span></div></section>
+    <section class="panel"><h2>Goal</h2><div class="steps" id="steps"><span>none yet</span></div></section>
+  </div>
+  <div class="grid2">
+    <section class="panel"><div class="row">
+      <div class="orb" id="orb" title="lamp light"></div>
+      <div style="flex:1"><div class="state" id="st">offline</div><div class="caption" id="cap">Press Start and allow camera and mic.</div></div>
+      <div class="pad" title="mood: valence (x) and arousal (y)"><span style="left:4px;top:2px">excited</span>
+        <span style="right:4px;bottom:2px">calm</span><i id="dot" style="left:50%;top:80%"></i></div>
+      <div style="width:70px;text-align:center"><div id="mood" style="font-weight:600">-</div><div class="caption">mood</div></div>
+    </div></section>
+    <section class="panel"><h2>Conversation</h2><div class="chat" id="chat"></div>
+      <div class="say"><input id="txt" placeholder="Type instead of speaking, e.g. shine your light on my mug"><button id="send">Send</button></div>
+      <details><summary>Event log</summary><div id="log"></div></details>
+    </section>
+  </div>
+</main>
 <script>
 const FR = {AUDIO_IN: 1, VIDEO_IN: 2, AUDIO_OUT: 3};
 const $ = id => document.getElementById(id);
 let ws, micCtx, out, playHead = 0, muted = false, sources = [], doneTimer, music = null;
-const log = s => { const d = document.createElement('div'); d.textContent = s; $('log').prepend(d); };
+const log = s => { const d = document.createElement('div'); d.textContent = `${new Date().toLocaleTimeString()}  ${s}`; $('log').prepend(d); };
 const pack = (k, buf) => { const u = new Uint8Array(buf.byteLength + 1); u[0] = k; u.set(new Uint8Array(buf), 1); return u.buffer; };
+
+const STATES = {
+  offline: ['#5b6170', 'Press Start and allow camera and mic.'], idle: ['#5b6170', 'Resting. Look at the camera to wake me.'],
+  noticing: ['#f5c451', 'Oh? Someone is there.'], engaged: ['#4ade80', 'I see you. Talk to me.'],
+  listening: ['#60a5fa', 'Listening...'], thinking: ['#c084fc', 'Thinking...'], speaking: ['#f472b6', 'Speaking. Talk over me to interrupt.'],
+  acting: ['#fbbf24', 'On it: aiming, lighting, checking the scene.'], disengaging: ['#94a3b8', 'You looked away... getting sleepy.'],
+};
+function showState(s) {
+  const [c, cap] = STATES[s] || STATES.idle;
+  document.documentElement.style.setProperty('--accent', c);
+  $('st').textContent = s; $('cap').textContent = cap;
+}
 
 // Mic -> 16 kHz PCM16, 20 ms frames
 const WORKLET = `class Cap extends AudioWorkletProcessor{constructor(){super();this.b=new Int16Array(320);this.i=0}
@@ -29,19 +95,24 @@ this.b[this.i++]=s<0?s*32768:s*32767;if(this.i===320){this.port.postMessage(this
 registerProcessor('cap',Cap)`;
 
 async function start() {
+  $('go').disabled = true; $('go').textContent = 'Running';
   const stream = await navigator.mediaDevices.getUserMedia({
     video: {width: 640, height: 480},
     audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true}});
   $('v').srcObject = stream;
   ws = new WebSocket(`ws://${location.host}/ws`); ws.binaryType = 'arraybuffer';
-  ws.onopen = () => $('st').textContent = 'connected';
-  ws.onclose = () => $('st').textContent = 'offline';
+  ws.onopen = () => showState('idle');
+  ws.onclose = () => { showState('offline'); $('go').disabled = false; $('go').textContent = 'Start'; };
   ws.onmessage = onMsg;
 
   micCtx = new AudioContext({sampleRate: 16000});  // Chrome resamples the mic for us
   await micCtx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], {type: 'application/javascript'})));
   const node = new AudioWorkletNode(micCtx, 'cap');
-  node.port.onmessage = e => ws.readyState === 1 && ws.send(pack(FR.AUDIO_IN, e.data));
+  node.port.onmessage = e => {
+    if (ws.readyState === 1) ws.send(pack(FR.AUDIO_IN, e.data));
+    const a = new Int16Array(e.data); let s = 0; for (const x of a) s += x * x;
+    $('lvl').style.width = Math.min(100, Math.sqrt(s / a.length) / 60) + '%';
+  };
   const sink = micCtx.createGain(); sink.gain.value = 0;  // keeps the graph pulling, no local monitoring
   micCtx.createMediaStreamSource(stream).connect(node).connect(sink).connect(micCtx.destination);
 
@@ -52,6 +123,16 @@ async function start() {
     g.drawImage($('v'), 0, 0, 640, 480);
     cv.toBlob(b => b && b.arrayBuffer().then(a => ws.send(pack(FR.VIDEO_IN, a))), 'image/jpeg', 0.7);
   }, 200);
+}
+
+// ---- what the lamp sees: face box from the server's local detector, drawn over the mirrored preview ----
+function drawFace(f) {
+  const c = $('ov'), g = c.getContext('2d'); c.width = c.clientWidth; c.height = c.clientHeight; g.clearRect(0, 0, c.width, c.height);
+  if (!f) { $('seeing').textContent = ws ? 'no one in view' : 'camera off'; return; }
+  const w = f.w * c.width, h = (f.h || f.w * 4 / 3) * c.height, x = (1 - (f.x + 1) / 2) * c.width - w / 2, y = (f.y + 1) / 2 * c.height - h / 2;
+  const col = f.attending ? '#4ade80' : '#f5c451';
+  g.strokeStyle = col; g.lineWidth = 3; g.shadowColor = col; g.shadowBlur = 12; g.strokeRect(x, y, w, h);
+  $('seeing').textContent = f.attending ? 'you are looking at me' : 'I see you (looking away)';
 }
 
 // ---- voice ----
@@ -104,28 +185,52 @@ function startMusic(mood, bpm) {
 function stopMusic() { if (!music) return; clearInterval(music.id); music.g.gain.setTargetAtTime(0, out.currentTime, .2); music = null; }
 const duck = on => music && music.g.gain.setTargetAtTime(on ? .025 : .12, out.currentTime, .1);
 
+// ---- panels ----
+function bubble(role, text, note) {
+  const d = document.createElement('div'); d.className = 'b ' + role; d.textContent = text;
+  if (note) { const s = document.createElement('small'); s.textContent = note; d.append(s); }
+  $('chat').append(d); $('chat').scrollTop = $('chat').scrollHeight;
+}
+let focus = null, sceneNames = [];
+function drawScene() {
+  $('scene').replaceChildren(...(sceneNames.length ? sceneNames : ['nothing seen yet']).map(n => {
+    const s = document.createElement('span'); s.textContent = n; if (n === focus) s.className = 'focus'; return s; }));
+}
+const STEPS = ['start', 'aim', 'observe', 'verify', 'done'];
+function goalStep(m) {
+  if (m.step === 'start') $('steps').replaceChildren(...STEPS.map(n => { const s = document.createElement('span'); s.dataset.step = n; s.textContent = n; return s; }));
+  const el = $('steps').querySelector(`[data-step="${m.step === 'failed' ? 'done' : m.step}"]`);
+  if (el) { el.className = m.step === 'failed' ? 'bad' : 'on'; el.textContent = `${m.step === 'failed' ? 'failed' : m.step} ${m.ms} ms`; }
+  $('steps').querySelectorAll('span').forEach(s => { if (STEPS.indexOf(s.dataset.step) < STEPS.indexOf(m.step)) s.classList.add('on'); });
+}
+
 function onMsg(e) {
   if (e.data instanceof ArrayBuffer) { if (new Uint8Array(e.data)[0] === FR.AUDIO_OUT) playPCM(e.data.slice(1)); return; }
   const m = JSON.parse(e.data);
   switch (m.type) {
-    case 'state': $('st').textContent = m.state; log(`${m.prev} -> ${m.state}  (${m.event})`);
+    case 'state': showState(m.state); log(`${m.prev} -> ${m.state}  (${m.event})`);
       duck(['listening', 'thinking', 'speaking'].includes(m.state)); break;
     case 'tts_start': muted = false; clearTimeout(doneTimer); break;
     case 'tts_end': { const ms = Math.max(0, (playHead - out.currentTime) * 1000);
       doneTimer = setTimeout(() => ws.send(JSON.stringify({type: 'playback_done'})), ms + 100); break; }
-    case 'stop_audio': clearTimeout(doneTimer); stopVoice(); break;
+    case 'stop_audio': clearTimeout(doneTimer); stopVoice(); log('voice stopped (barge-in)'); break;
     case 'sfx': sfx(m.name); log(`sfx: ${m.name}`); break;
     case 'music': m.action === 'play' ? startMusic(m.mood, m.bpm) : stopMusic(); log(`music: ${m.action} ${m.mood || ''}`); break;
-    case 'transcript': log(`${m.role}: ${m.text}${m.emotion ? `  [${m.emotion}]` : ''}`); break;
-    case 'scene': log('scene: ' + m.objects.map(o => o.name).join(', ')); break;
-    case 'goal': log(`goal ${m.step} +${m.ms} ms ${m.target || m.why || ''}`); break;
-    case 'body': { $('mood').textContent = `${m.mood} ${m.va.join(',')}`;
-      const [r, g, b] = m.light.rgb.map(c => Math.round(c * 255 * (.3 + .7 * m.light.brightness)));
-      $('light').style.background = $('light').style.color = `rgb(${r},${g},${b})`; break; }
+    case 'transcript': m.role === 'user' ? bubble('user', m.text) : bubble('lumi', m.text, m.emotion); break;
+    case 'metrics': log(`latency: ${Object.entries(m).filter(([k]) => k !== 'type').map(([k, v]) => `${k} ${v}`).join(', ')}`); break;
+    case 'scene': sceneNames = m.objects.map(o => o.name); drawScene(); break;
+    case 'goal': goalStep(m); log(`goal ${m.step} +${m.ms} ms ${m.target || m.why || ''}`); break;
+    case 'body': {
+      $('mood').textContent = m.mood;
+      $('dot').style.left = (m.va[0] + 1) * 50 + '%'; $('dot').style.top = (1 - m.va[1]) * 50 + '%';
+      const k = .3 + .7 * m.light.brightness, [r, g, b] = m.light.rgb.map(c => Math.round(c * 255 * k));
+      document.documentElement.style.setProperty('--glow', `rgb(${r},${g},${b})`);
+      if ((m.focus || null) !== focus) { focus = m.focus || null; drawScene(); }
+      drawFace(m.face); break; }
   }
 }
 $('go').onclick = start;
-$('send').onclick = () => { ws && ws.send(JSON.stringify({type: 'text', text: $('txt').value})); $('txt').value = ''; };
+$('send').onclick = () => { if (ws && $('txt').value.trim()) ws.send(JSON.stringify({type: 'text', text: $('txt').value})); $('txt').value = ''; };
 $('txt').onkeydown = e => e.key === 'Enter' && $('send').click();
 </script>
 </body></html>

@@ -55,6 +55,7 @@ class Session:
         self._reply: asyncio.Task | None = None
         self._pending_music: str | None = None
         self._gaze = (0.0, 0.0)
+        self._face: dict | None = None  # latest face reading, shown by the client as the lamp's view
         self._vision_busy = self._scene_busy = False
         self._last_scene = 0.0
         self._last_greet = -1e9
@@ -171,6 +172,8 @@ class Session:
                         level=self.attn.attending, ms=round((time.perf_counter() - t0) * 1000, 1))
             if reading.face:
                 self._gaze = (reading.x, reading.y)
+            self._face = ({"x": round(reading.x, 3), "y": round(reading.y, 3), "w": round(reading.w, 3),
+                           "h": round(reading.h, 3), "attending": reading.attending} if reading.face else None)
             for ev in events:
                 self.fsm.fire(ev)
             # Edge events fired while SPEAKING/THINKING are dropped by the FSM, so re-check the level:
@@ -223,7 +226,7 @@ class Session:
             if prev == State.SPEAKING and ev != Ev.TTS_DONE:
                 self._purge_audio()
                 self._emit({"type": "stop_audio"})
-        self.vad.strict = nxt == State.SPEAKING
+        self.vad.strict = nxt in (State.SPEAKING, State.ACTING)  # a cough should not cut off a reply or a goal
 
         if nxt == State.NOTICING:
             self._emit({"type": "sfx", "name": "notice"})
@@ -432,4 +435,4 @@ class Session:
             if n % 4 == 0:  # 5 Hz to the UI, 20 Hz to the sim
                 a = self.fsm.affect
                 self._emit({"type": "body", **frame, "mood": a.label(),
-                            "va": [round(a.valence, 2), round(a.arousal, 2)]})
+                            "va": [round(a.valence, 2), round(a.arousal, 2)], "face": self._face})

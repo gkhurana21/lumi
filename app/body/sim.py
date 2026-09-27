@@ -117,17 +117,18 @@ class LightViz:
         p, ident = self.p, [0, 0, 0, 1]
         pos, orn = p.getLinkState(self.robot, self.link, computeForwardKinematics=True)[4:6]
         k = light["brightness"]
-        r, g, b = (c * (0.3 + 0.7 * k) for c in light["rgb"])  # same dimming as the emitter
+        raw = list(light["rgb"])  # beams: raw color, brightness in alpha (blending over a dark room)
+        r, g, b = (c * (0.3 + 0.7 * k) for c in light["rgb"])  # pools get the emitter's dimming
         fwd = p.getMatrixFromQuaternion(orn)[0::3]  # head forward axis (+x of the emitter frame)
         reach = -pos[2] / fwd[2] if fwd[2] < -0.05 else math.inf
         pick = next((i for i, length in enumerate(self.SPOT_LENGTHS) if length >= reach), None)
         for i, (spot, pool) in enumerate(zip(self.spots, self.pools, strict=True)):
             on = i == pick
-            self._place(spot, pos if on and self.show_beam else self.HIDDEN, orn, [r, g, b, 0.05 + 0.25 * k])
+            self._place(spot, pos if on and self.show_beam else self.HIDDEN, orn, [*raw, 0.08 + 0.3 * k])
             hit = [pos[0] + reach * fwd[0], pos[1] + reach * fwd[1], 0.002] if on else self.HIDDEN
             self._place(pool, hit, ident, [r, g, b, 0.2 + 0.6 * k])
         self._place(self.glow, pos if pick is None and self.show_beam else self.HIDDEN, orn,
-                    [r, g, b, 0.08 + 0.3 * k])
+                    [*raw, 0.1 + 0.45 * k])
         if focus and pick is not None:
             at = [pos[0] + reach * fwd[0], pos[1] + reach * fwd[1], 0.12]
             self.label = p.addUserDebugText(focus, at, textColorRGB=[1, 1, 1], textSize=1.6,

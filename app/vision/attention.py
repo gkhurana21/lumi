@@ -64,7 +64,7 @@ class AttentionTracker:
                 kp = d.location_data.relative_keypoints  # right_eye, left_eye, nose, mouth, r_ear, l_ear
                 mid = (kp[0].x + kp[1].x) / 2
                 eye = abs(kp[0].x - kp[1].x) or 1e-6
-                r.face, r.w = True, bb.width
+                r.face, r.w, r.h = True, bb.width, bb.height
                 r.yaw = (kp[2].x - mid) / eye
                 r.x = (bb.xmin + bb.width / 2) * 2 - 1
                 r.y = (bb.ymin + bb.height / 2) * 2 - 1

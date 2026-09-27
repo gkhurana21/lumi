@@ -1,6 +1,7 @@
 """End-to-end over the real WebSocket with fake providers: no keys, camera, mic, or sim."""
 import json
 import time
+import wave
 
 import pytest
 from fastapi.testclient import TestClient
@@ -268,6 +269,8 @@ def test_demo_script_end_to_end(client, live):
     bright = [d["light"]["brightness"] for d in bodies]
     assert min(bright) <= 0.15 and max(bright) == 1.0  # dim while idle, spotlight for the goal
     assert len({tuple(d["light"]["rgb"]) for d in bodies}) > 5  # color changes (mood, spotlight, dance)
+    assert any(d["face"] and d["face"]["attending"] for d in bodies)  # the client can draw what the lamp sees
+    assert any(d["face"] is None for d in bodies)  # and that nobody is there before the user looks
     yaw = [d["joints"]["base_yaw_joint"] for d in bodies]
     assert max(yaw) - min(yaw) > 0.1  # the body visibly moves
 
@@ -382,3 +385,22 @@ def test_a_beeping_sound_does_not_start_a_conversation(client):
         while sum(d["type"] == "body" for d in seen) < 8:  # ~1.6 s of the body stream after the beeps
             seen.append(recv_until(ws, lambda d: True)[0])
     assert not [d for d in seen if d["type"] in ("state", "sfx")]  # no listen blip, lamp still idle
+
+
+def test_a_short_noise_does_not_cancel_a_goal(client, monkeypatch):
+    import numpy as np
+
+    from tests.test_providers import WAV
+    scripted_scenes(monkeypatch, [MUG])
+    with wave.open(WAV) as w:
+        speech = np.frombuffer(w.readframes(w.getnframes()), np.int16)
+    silence = np.zeros(16000, np.int16)
+    burst = np.concatenate([silence[:1600], speech[12000:15200], silence])  # 200 ms of voice
+    with client.websocket_connect("/ws") as ws:
+        ws.send_bytes(b"\x02frame")
+        recv_until(ws, lambda d: d["type"] == "scene")
+        say(ws, "shine your light on my mug")
+        recv_until(ws, is_state("acting"), limit=60)
+        speak_audio(ws, burst.tobytes())  # 200 ms: passes the normal 120 ms start, not the strict 360 ms one
+        _, seen = recv_until(ws, lambda d: d["type"] == "goal" and d["step"] in ("done", "failed"), limit=100)
+    assert "listening" not in [d.get("state") for d in seen] and seen[-1]["step"] == "done"
