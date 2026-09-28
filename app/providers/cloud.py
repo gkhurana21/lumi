@@ -127,20 +127,28 @@ class OpenAITTS:
                     yield chunk[:cut]
 
 
+FALLBACK_REPLY = {"say": "Hmm, my thoughts got tangled.", "emotion": "confused", "gesture": "tilt", "music": "none"}
+
+
+def system_prompt(scene: list[dict], memories: list[str], mood: str) -> str:
+    """Persona plus what the lamp sees, remembers, and feels right now (shared by every LLM provider)."""
+    ctx = [f"Your current mood: {mood}."]
+    if scene:
+        ctx.append("You can see right now: " + "; ".join(f'{o["name"]} ({o.get("location", "")})' for o in scene))
+    if memories:
+        ctx.append("You remember:\n" + "\n".join(f"- {m}" for m in memories))
+    return PERSONA + "\n\n" + "\n".join(ctx)
+
+
 class ClaudeLLM:
     def __init__(self, client: AsyncAnthropic | None = None):
         self.c = _anthropic(client)
 
     async def respond(self, *, user_text, history, memories, scene, mood):
-        ctx = [f"Your current mood: {mood}."]
-        if scene:
-            ctx.append("You can see right now: " + "; ".join(f'{o["name"]} ({o.get("location", "")})' for o in scene))
-        if memories:
-            ctx.append("You remember:\n" + "\n".join(f"- {m}" for m in memories))
         msg = await self.c.messages.create(
             model=settings.llm_model,
             max_tokens=300,
-            system=PERSONA + "\n\n" + "\n".join(ctx),
+            system=system_prompt(scene, memories, mood),
             tools=[RESPOND_TOOL],
             tool_choice={"type": "tool", "name": "respond"},
             messages=[*history, {"role": "user", "content": user_text}],
@@ -148,7 +156,7 @@ class ClaudeLLM:
         for b in msg.content:
             if b.type == "tool_use":
                 return b.input
-        return {"say": "Hmm, my thoughts got tangled.", "emotion": "confused", "gesture": "tilt", "music": "none"}
+        return dict(FALLBACK_REPLY)
 
 
 class ClaudeScene:

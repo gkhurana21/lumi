@@ -17,4 +17,4 @@ make install   # venv on python3.12, pinned deps (constraints.txt), Chroma embed
 make test      # unit + end-to-end tests with fake providers, no network
 make render    # headless PyBullet: proves the supplied URDF and mesh load (PNGs in out/poses/)
 
-echo "Done. Put API keys in .env (PROVIDERS=cloud), then: make run  (or: deploy/lumi.service)"
+echo "Done. Put a key in .env (PROVIDERS=gemini + GEMINI_API_KEY), then: make run  (or: deploy/lumi.service)"

@@ -6,6 +6,7 @@ numpy==2.4.6
 mediapipe==0.10.14  # legacy mp.solutions API; brings opencv-contrib-python, which provides cv2
 webrtcvad-wheels==2.0.14
 chromadb==1.5.9
+google-genai==2.25.0  # PROVIDERS=gemini: one Google key for STT, LLM, vision, TTS
 anthropic==1.8.0
 openai==3.19.2
 pybullet==3.2.7  # no macOS arm64 wheel: make install builds a patched copy (see Makefile)

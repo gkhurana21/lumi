@@ -72,7 +72,7 @@ details{margin-top:12px}summary{color:var(--dim);cursor:pointer;font-size:12px}
 <script>
 const FR = {AUDIO_IN: 1, VIDEO_IN: 2, AUDIO_OUT: 3};
 const $ = id => document.getElementById(id);
-let ws, micCtx, out, playHead = 0, muted = false, sources = [], doneTimer, music = null;
+let ws, micCtx, out, playHead = 0, muted = false, sources = [], doneTimer, music = null, speaking = null;
 const log = s => { const d = document.createElement('div'); d.textContent = `${new Date().toLocaleTimeString()}  ${s}`; $('log').prepend(d); };
 const pack = (k, buf) => { const u = new Uint8Array(buf.byteLength + 1); u[0] = k; u.set(new Uint8Array(buf), 1); return u.buffer; };
 
@@ -145,7 +145,19 @@ function playPCM(buf) {
   playHead = Math.max(playHead, out.currentTime + 0.05); s.start(playHead); playHead += ab.duration;
   sources.push(s); s.onended = () => { sources = sources.filter(x => x !== s); };
 }
-function stopVoice() { muted = true; sources.forEach(s => { try { s.stop(); } catch {} }); sources = []; playHead = 0; }
+function stopVoice() {
+  muted = true; sources.forEach(s => { try { s.stop(); } catch {} }); sources = []; playHead = 0;
+  if (speaking) { speaking.cancelled = true; speechSynthesis.cancel(); speaking = null; }
+}
+// Fallback when the server's TTS is unavailable (quota, network): the browser speaks, then reports playback_done.
+function speakLocally(text) {
+  const u = new SpeechSynthesisUtterance(text), voices = speechSynthesis.getVoices();
+  u.voice = voices.find(v => /en[-_]US/.test(v.lang) && /Samantha|Google US English|Aria|Jenny/.test(v.name))
+    || voices.find(v => v.lang.startsWith('en')) || null;
+  u.pitch = 1.35; u.rate = 1.05;  // a small, bright voice
+  u.onend = u.onerror = () => { if (!u.cancelled && ws) ws.send(JSON.stringify({type: 'playback_done'})); if (speaking === u) speaking = null; };
+  speaking = u; speechSynthesis.speak(u);
+}
 
 // ---- sound effects: [startHz, endHz, seconds] ----
 const SFX = {notice: [[500, 900, .12]], greet: [[523, 784, .09], [784, 1175, .14]], listen: [[880, 880, .05]],
@@ -214,6 +226,7 @@ function onMsg(e) {
     case 'tts_end': { const ms = Math.max(0, (playHead - out.currentTime) * 1000);
       doneTimer = setTimeout(() => ws.send(JSON.stringify({type: 'playback_done'})), ms + 100); break; }
     case 'stop_audio': clearTimeout(doneTimer); stopVoice(); log('voice stopped (barge-in)'); break;
+    case 'speak': speakLocally(m.text); log('voice: browser speech (server TTS unavailable)'); break;
     case 'sfx': sfx(m.name); log(`sfx: ${m.name}`); break;
     case 'music': m.action === 'play' ? startMusic(m.mood, m.bpm) : stopMusic(); log(`music: ${m.action} ${m.mood || ''}`); break;
     case 'transcript': m.role === 'user' ? bubble('user', m.text) : bubble('lumi', m.text, m.emotion); break;

@@ -10,14 +10,14 @@ Browser (I/O only) ── one WebSocket ── Python server (all behavioral dec
 camera JPEG 5 fps ──┐     local  AttentionTracker (MediaPipe) ──┐
 mic PCM 16 kHz    ──┤     local  VAD (webrtcvad + noise floor) ─┴──> FSM + Affect ──> Body 20 Hz
                     ├─────cloud  STT -> LLM (tool JSON) -> TTS <─────┤ turns          │ queue
-voice PCM 24 kHz <──┤     cloud  scene VLM every 4 s -> memory <─────┤ memory         ▼
+voice PCM 24 kHz <──┤     cloud  scene VLM every 15 s -> memory <────┤ memory         ▼
 SFX, music, UI <────┘     local  goal executor <- {do, target} <─────┘ goals   PyBullet 240 Hz
                                                                                (joints + light)
 ```
 
-**Protocol.** One WebSocket per interaction. Binary frames are `[kind byte][payload]`: mic PCM16 16 kHz in 20 ms chunks, camera JPEG, and TTS PCM16 24 kHz out. Control is JSON text (`state`, `transcript`, `scene`, `body`, `sfx`, `music`, `goal`, `tts_start/end`, `stop_audio`; client sends `playback_done` and typed text). Ordered delivery makes barge-in simple: the server purges queued audio and tells the client to stop. The browser owns capture and playback, so the server needs no audio or camera drivers; SFX and music are synthesized in the browser, tempo-locked to the dance.
+**Protocol.** One WebSocket per interaction. Binary frames are `[kind byte][payload]`: mic PCM16 16 kHz in 20 ms chunks, camera JPEG, and TTS PCM16 24 kHz out. Control is JSON text (`state`, `transcript`, `scene`, `body`, `sfx`, `music`, `goal`, `tts_start/end`, `stop_audio`, `speak`; client sends `playback_done` and typed text). Ordered delivery makes barge-in simple: the server purges queued audio and tells the client to stop. The browser owns capture and playback, so the server needs no audio or camera drivers; SFX and music are synthesized in the browser, tempo-locked to the dance.
 
-**Orchestration.** A discrete engagement FSM (IDLE, NOTICING, ENGAGED, LISTENING, THINKING, SPEAKING, ACTING, DISENGAGING) is the only way state changes; all side effects live in one transition handler. A continuous valence/arousal affect rides on top: perception events give instant impulses, the LLM sets a held emotion, each state has a baseline. Blocking work (detection, memory) runs in threads; network calls are async with 10 s timeouts.
+**Orchestration.** A discrete engagement FSM (IDLE, NOTICING, ENGAGED, LISTENING, THINKING, SPEAKING, ACTING, DISENGAGING) is the only way state changes; all side effects live in one transition handler. A continuous valence/arousal affect rides on top: perception events give instant impulses, the LLM sets a held emotion, each state has a baseline. Blocking work (detection, memory) runs in threads; network calls are async with 10 s timeouts. Cloud models sit behind four small provider interfaces (STT, LLM, scene, TTS): Google Gemini with one key by default, Anthropic + OpenAI as an alternative, and offline fakes for tests. If cloud TTS fails, the browser speaks the line (`speak`), so the lamp never goes silent.
 
 ## Model-to-action boundary
 

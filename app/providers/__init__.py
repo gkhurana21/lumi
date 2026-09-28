@@ -36,6 +36,10 @@ class Providers:
 
 
 def build_providers() -> Providers:
+    if settings.providers == "gemini":
+        from .gemini import GeminiLLM, GeminiScene, GeminiSTT, GeminiTTS, make_client
+        client = make_client()
+        return Providers(GeminiSTT(client), GeminiTTS(client), GeminiLLM(client), GeminiScene(client))
     if settings.providers == "cloud":
         from .cloud import ClaudeLLM, ClaudeScene, OpenAISTT, OpenAITTS
         return Providers(OpenAISTT(), OpenAITTS(), ClaudeLLM(), ClaudeScene())

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import math
@@ -26,6 +27,8 @@ MUSIC_BPM = {"happy": 112, "chill": 84}
 SPOT_RGB = [1.0, 0.97, 0.9]  # near-white spotlight for goals
 MOVE_TOL = 0.25  # image units ([-1, 1] per axis): larger shift between aim and re-observation = the object moved
 AIM_TIMEOUT_S = 2.5
+TTS_CACHE = "data/tts_cache"
+TTS_BACKOFF_S = 60  # after a TTS failure (quota, network), the browser speaks for this long before TTS is retried
 
 
 def find_object(objects: list[dict], name: str) -> dict | None:
@@ -66,6 +69,7 @@ class Session:
         self._goal_task: asyncio.Task | None = None
         self._look: tuple[float, float] | None = None  # goal target overriding face gaze (camera frame, [-1, 1])
         self._tts_cache: dict[str, list[bytes]] = {}  # fixed lines synthesized once, so they land on their beat
+        self._tts_down_until = 0.0
         self._trace_f = None
         if settings.trace_dir:
             os.makedirs(settings.trace_dir, exist_ok=True)
@@ -323,17 +327,38 @@ class Session:
 
     async def _prefetch(self, lines: list[str]) -> None:
         """Synthesize fixed lines up front: the greeting voice then starts exactly 0.4 s after its chime and bounce
-        instead of 0.4 s plus a variable TTS round trip."""
+        instead of 0.4 s plus a variable TTS round trip. With a real TTS they are also cached on disk, so each line
+        is synthesized once, not on every page load (free-tier TTS quotas are small)."""
         for text in lines:
+            path = self._tts_disk_path(text)
             try:
+                if path and os.path.exists(path):
+                    pcm = open(path, "rb").read()
+                    self._tts_cache[text] = [pcm[i:i + 4800] for i in range(0, len(pcm), 4800)]
+                    continue
                 self._tts_cache[text] = [c async for c in self.p.tts.stream(text)]
+                if path:
+                    os.makedirs(os.path.dirname(path), exist_ok=True)
+                    with open(path, "wb") as f:
+                        f.write(b"".join(self._tts_cache[text]))
             except Exception:
-                log.warning("could not prefetch %r; it will stream when needed", text)
+                log.warning("could not prefetch %r; it will be synthesized or spoken by the browser", text)
+
+    @staticmethod
+    def _tts_disk_path(text: str) -> str | None:
+        if settings.providers == "fake":
+            return None
+        voice = (settings.gemini_tts_model + settings.gemini_voice if settings.providers == "gemini"
+                 else settings.tts_model + settings.tts_voice)
+        key = hashlib.sha1(f"{settings.providers}|{voice}|{text}".encode()).hexdigest()[:16]
+        return os.path.join(TTS_CACHE, f"{key}.pcm")
 
     async def _audio(self, text: str):
         if text in self._tts_cache:
             for chunk in self._tts_cache[text]:
                 yield chunk
+        elif time.monotonic() < self._tts_down_until:
+            raise RuntimeError("TTS recently failed; skipping it for a while")
         else:
             async for chunk in self.p.tts.stream(text):
                 yield chunk
@@ -341,17 +366,34 @@ class Session:
     async def _speak(self, text: str, emotion: str, t0: float | None = None, marks: dict | None = None) -> None:
         self._emit({"type": "transcript", "role": "robot", "text": text, "emotion": emotion})
         self._emit({"type": "tts_start"})
-        first = True
-        async for chunk in self._audio(text):
-            if first and t0 is not None and marks is not None:
-                marks["first_audio_ms"] = (time.perf_counter() - t0) * 1000
-                marks = {k: round(v) for k, v in marks.items()}
-                log.info("latency %s", marks)
-                self._trace("metrics", **marks)
-                self._emit({"type": "metrics", **marks})
-            first = False
-            await self.out.put(pack(Frame.AUDIO_OUT, chunk))
+        sent = False
+        try:
+            async for chunk in self._audio(text):
+                if not sent:
+                    self._first_audio(t0, marks)
+                sent = True
+                await self.out.put(pack(Frame.AUDIO_OUT, chunk))
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            if not sent:  # never go silent: the browser speaks the line and reports playback_done when it ends
+                if time.monotonic() >= self._tts_down_until:
+                    log.warning("TTS failed (%s); browser speech for the next %d s", e, TTS_BACKOFF_S)
+                self._tts_down_until = max(self._tts_down_until, time.monotonic() + TTS_BACKOFF_S)
+                self._first_audio(t0, marks)
+                self._emit({"type": "speak", "text": text})
+                return
+            log.warning("TTS stream broke mid-line: %s", e)
         self._emit({"type": "tts_end"})  # client replies playback_done when the speaker is actually quiet
+
+    def _first_audio(self, t0: float | None, marks: dict | None) -> None:
+        if t0 is None or marks is None:
+            return
+        marks["first_audio_ms"] = (time.perf_counter() - t0) * 1000
+        rounded = {k: round(v) for k, v in marks.items()}
+        log.info("latency %s", rounded)
+        self._trace("metrics", **rounded)
+        self._emit({"type": "metrics", **rounded})
 
     # ---------- goals: local planner + executor ----------
     # The model chose only {do, target}. Finding the target, aiming, lighting, re-observing, verifying,

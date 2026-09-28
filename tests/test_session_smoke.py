@@ -404,3 +404,25 @@ def test_a_short_noise_does_not_cancel_a_goal(client, monkeypatch):
         speak_audio(ws, burst.tobytes())  # 200 ms: passes the normal 120 ms start, not the strict 360 ms one
         _, seen = recv_until(ws, lambda d: d["type"] == "goal" and d["step"] in ("done", "failed"), limit=100)
     assert "listening" not in [d.get("state") for d in seen] and seen[-1]["step"] == "done"
+
+
+def test_voice_falls_back_to_browser_speech_when_tts_fails(client, monkeypatch):
+    from app.providers.fakes import FakeTTS
+
+    calls = []
+
+    async def broken(self, text):
+        calls.append(text)
+        raise RuntimeError("429 quota exceeded")
+        yield b""  # pragma: no cover (makes this an async generator)
+
+    monkeypatch.setattr(FakeTTS, "stream", broken)
+    with client.websocket_connect("/ws") as ws:
+        for _ in range(2):
+            ws.send_text(json.dumps({"type": "text", "text": "what do you see?"}))
+            d, seen = recv_until(ws, lambda d: d["type"] == "speak")
+            assert d["text"] and "tts_end" not in [x["type"] for x in seen]  # the browser speaks this line
+            ws.send_text(json.dumps({"type": "playback_done"}))  # sent by the client when its speech ends
+            recv_until(ws, is_state("engaged"))
+    greetings = 3  # prefetched at session start, also failing
+    assert len(calls) == greetings + 1  # the second line skipped the broken TTS (backoff) and went straight to speech

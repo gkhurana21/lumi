@@ -15,7 +15,8 @@ Every behavior is decided locally in one Python process; the cloud only supplies
 ```bash
 git clone <repo> ~/lumi && cd ~/lumi
 bash deploy/setup_ubuntu.sh   # apt packages, Chromium, venv on Python 3.12, pinned deps, tests, headless render
-# edit .env: PROVIDERS=cloud, ANTHROPIC_API_KEY, OPENAI_API_KEY   (PROVIDERS=fake needs no keys or network)
+# edit .env: PROVIDERS=gemini + GEMINI_API_KEY (one free Google AI Studio key), or PROVIDERS=cloud + Anthropic and
+#           OpenAI keys. PROVIDERS=fake needs no keys or network.
 make run                      # or run at login: deploy/lumi.service (systemd user unit, instructions inside)
 ```
 
@@ -30,7 +31,7 @@ Open http://localhost:8000 in **Chromium or Chrome**, press Start, allow camera 
 | `make urdf` / `make render` | joint table and role mapping / headless PNGs of every pose in `out/poses/` |
 | `make sweep` / `make poses` | PyBullet window: each joint alone / every state and gesture |
 | `make trace` | summarize the last session: engagement latency, flapping, yaw spread, turn latency |
-| `make cloudcheck` | time each cloud call with synthetic inputs (needs keys) |
+| `make cloudcheck` | time each cloud call (Gemini or Anthropic/OpenAI) with synthetic inputs (needs a key) |
 | `make load` | CPU and memory under a client-like load with fake providers (`python scripts/measure_load.py 30 --sim` includes the window) |
 
 ## Architecture
@@ -141,12 +142,16 @@ MacBook Air (Apple M3, 8 GB RAM, integrated GPU): built-in 720p camera, built-in
 
 ## Cloud usage and data
 
-| Data | Sent to | When | Why |
-|---|---|---|---|
-| Utterance audio (WAV, only between VAD start/end) | OpenAI transcription | each turn | fast, accurate STT without a local model |
-| Transcript, short history, retrieved memories, mood | Anthropic LLM | each turn | character dialogue + structured emotion/gesture/music |
-| One JPEG every 4 s, plus one per goal re-observation | Anthropic vision | continuously; during goals | object names, locations, and image positions for memory and goal aiming |
-| Reply text; the 3 fixed greeting lines once at session start | OpenAI TTS | each turn; session start | expressive voice, streamed PCM; greetings cached so the voice lands on its beat |
+Two interchangeable cloud setups; the data sent is the same, only the recipient changes.
+
+| Data | `PROVIDERS=gemini` | `PROVIDERS=cloud` | When | Why |
+|---|---|---|---|---|
+| Utterance audio (WAV, only between VAD start/end) | Google Gemini | OpenAI transcription | each turn | fast, accurate STT without a local model |
+| Transcript, short history, retrieved memories, mood | Google Gemini | Anthropic Claude | each turn | character dialogue + structured emotion, gesture, music, goal |
+| One camera JPEG every `SCENE_INTERVAL_S` (15 s by default), plus one per goal re-observation | Google Gemini | Anthropic Claude | continuously; during goals | object names, locations, and image positions (boxes) for memory and goal aiming |
+| Reply text; the 3 fixed greeting lines once ever (cached on disk) | Google Gemini TTS | OpenAI TTS | each turn | expressive voice as PCM |
+
+If cloud TTS fails (quota, network), the line goes to the browser's built-in speech instead, so the lamp never goes silent; nothing extra leaves the machine.
 
 Stays local: all continuous video for attention, continuous mic audio (VAD), the state machine, memory store (Chroma on disk), motion, light, SFX, music, and the session trace (`out/traces/`, numbers only, used for the measurements). Every behavioral decision (when to engage, greet, listen, interrupt, sleep) is local; the cloud only supplies words and scene descriptions. `PROVIDERS=fake` sends nothing.
 

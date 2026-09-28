@@ -170,3 +170,114 @@ def test_speech_over_music_still_opens_a_turn_when_speech_starts():
     mix[32000:32000 + len(speech)] += 0.8 * speech  # speech from 2.0 s (voice onset ~2.25 s)
     ev = _events(mix)
     assert ev and ev[0][0] == "start" and 2.0 <= ev[0][1] <= 2.6
+
+
+# ---------- Gemini (google-genai on a mocked httpx transport) ----------
+
+def gemini(handler):
+    from google import genai
+    from google.genai import types
+
+    http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    return genai.Client(api_key="test", http_options=types.HttpOptions(httpx_async_client=http))
+
+
+def unb64(s: str) -> bytes:  # the SDK sends inline bytes as unpadded URL-safe base64
+    return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+
+
+def gemini_reply(*parts):
+    return {"candidates": [{"content": {"role": "model", "parts": list(parts)}, "finishReason": "STOP"}]}
+
+
+def test_gemini_stt_sends_16k_wav_and_returns_text():
+    from app.providers.gemini import GeminiSTT
+    pcm, seen = recorded_utterance()[0], {}
+
+    def handler(req):
+        body = json.loads(req.content)
+        seen["path"] = req.url.path
+        seen["audio"] = next(p["inlineData"] for p in body["contents"][0]["parts"] if "inlineData" in p)
+        return httpx.Response(200, json=gemini_reply({"text": " Hey Lumi, where did I leave my mug? "}))
+
+    text = asyncio.run(GeminiSTT(gemini(handler)).transcribe(pcm))
+    with wave.open(io.BytesIO(unb64(seen["audio"]["data"]))) as w:
+        assert (w.getframerate(), w.getnchannels(), w.getnframes()) == (16000, 1, len(pcm) // 2)
+    assert text == "Hey Lumi, where did I leave my mug?" and seen["audio"]["mime_type"] == "audio/wav"
+    assert seen["path"].endswith(":generateContent")
+
+
+def test_gemini_llm_forces_the_tool_and_parses_a_goal():
+    from app.providers.gemini import GeminiLLM
+    seen = {}
+    reply = {"say": "On it!", "emotion": "excited", "gesture": "perk", "music": "none",
+             "action": {"do": "spotlight", "target": "mug"}}
+
+    def handler(req):
+        seen.update(json.loads(req.content))
+        return httpx.Response(200, json=gemini_reply({"functionCall": {"name": "respond", "args": reply}}))
+
+    out = asyncio.run(GeminiLLM(gemini(handler)).respond(
+        user_text="shine your light on my mug", history=[{"role": "user", "content": "hi"},
+                                                          {"role": "assistant", "content": "hello!"}],
+        memories=["mug was left of the keyboard (just now)"], scene=[{"name": "mug", "location": "left"}],
+        mood="curious"))
+    assert out == reply
+    fc = seen["toolConfig"]["functionCallingConfig"]
+    assert fc["mode"] == "ANY" and fc["allowedFunctionNames"] == ["respond"]
+    system = seen["systemInstruction"]["parts"][0]["text"]
+    assert "mug (left)" in system and "left of the keyboard" in system
+    assert [c["role"] for c in seen["contents"]] == ["user", "model", "user"]
+
+
+def test_gemini_scene_turns_boxes_into_aim_points():
+    from app.providers.gemini import GeminiScene
+    jpeg, seen = b"\xff\xd8fake\xff\xd9", {}
+    objects = [{"name": "mug", "location": "left of the keyboard", "box_2d": [600, 100, 900, 300]},
+               {"name": "notebook", "location": "right", "box_2d": [500, 700, 800, 1000]},
+               {"name": "pen", "location": "center"}]  # no box: kept for memory, not aimable
+
+    def handler(req):
+        seen.update(json.loads(req.content))
+        return httpx.Response(200, json=gemini_reply(
+            {"functionCall": {"name": "report_scene", "args": {"objects": objects}}}))
+
+    out = asyncio.run(GeminiScene(gemini(handler)).describe(jpeg))
+    assert out[0] == {"name": "mug", "location": "left of the keyboard", "x": -0.6, "y": 0.5}
+    assert out[1]["x"] == 0.7 and out[1]["y"] == 0.3 and "x" not in out[2]
+    image = next(p["inlineData"] for p in seen["contents"][0]["parts"] if "inlineData" in p)
+    assert unb64(image["data"]) == jpeg and image["mime_type"] == "image/jpeg"
+
+
+def test_gemini_tts_returns_24k_chunks_and_resamples_other_rates():
+    from app.providers.gemini import GeminiTTS
+    pcm24 = (np.sin(np.arange(24000) / 10) * 8000).astype("<i2").tobytes()  # 1 s at 24 kHz
+    pcm16 = (np.sin(np.arange(16000) / 10) * 8000).astype("<i2").tobytes()  # 1 s at 16 kHz
+    seen = {}
+
+    def serve(pcm, rate):
+        def handler(req):
+            seen.update(json.loads(req.content))
+            return httpx.Response(200, json=gemini_reply({"inlineData": {
+                "mimeType": f"audio/L16;codec=pcm;rate={rate}", "data": base64.b64encode(pcm).decode()}}))
+        return handler
+
+    async def collect(handler):
+        return [c async for c in GeminiTTS(gemini(handler)).stream("Hello!")]
+
+    chunks = asyncio.run(collect(serve(pcm24, 24000)))
+    assert b"".join(chunks) == pcm24 and all(len(c) % 2 == 0 for c in chunks)
+    assert seen["generationConfig"]["responseModalities"] == ["AUDIO"]
+    assert seen["contents"][0]["parts"][0]["text"].endswith("Hello!")
+    resampled = b"".join(asyncio.run(collect(serve(pcm16, 16000))))
+    assert abs(len(resampled) // 2 - 24000) <= 2  # still one second, now at 24 kHz
+
+
+def test_gemini_providers_build_from_settings(monkeypatch):
+    from app.config import settings
+    from app.providers import build_providers
+
+    monkeypatch.setattr(settings, "providers", "gemini")
+    monkeypatch.setattr(settings, "gemini_api_key", "test")
+    p = build_providers()
+    assert type(p.stt).__name__ == "GeminiSTT" and p.stt.c is p.llm.c is p.scene.c is p.tts.c

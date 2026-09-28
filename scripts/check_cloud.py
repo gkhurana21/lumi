@@ -1,4 +1,4 @@
-"""Call each cloud provider with fixed inputs and time it. Needs keys in .env. Sends only synthetic data:
+"""Call each cloud provider (PROVIDERS=gemini or cloud) with fixed inputs and time it. Sends only synthetic data:
 the `say`-generated test utterance, its transcript, and a rendered lamp pose (never camera or mic data).
 
   python scripts/check_cloud.py [runs]
@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import cv2  # noqa: E402
 
 from app.config import settings  # noqa: E402
-from app.providers.cloud import ClaudeLLM, ClaudeScene, OpenAISTT, OpenAITTS  # noqa: E402
+from app.providers import build_providers  # noqa: E402
 
 RUNS = int(sys.argv[1]) if len(sys.argv) > 1 else 5
 IMAGE = "out/poses/state_engaged.png"  # from `make render`
@@ -26,14 +26,20 @@ def stats(xs):
 
 
 async def main() -> None:
-    if not (settings.anthropic_api_key and settings.openai_api_key):
+    if settings.providers == "gemini" and not settings.gemini_api_key:
+        sys.exit("Set GEMINI_API_KEY in .env first (https://aistudio.google.com/apikey).")
+    if settings.providers == "cloud" and not (settings.anthropic_api_key and settings.openai_api_key):
         sys.exit("Set ANTHROPIC_API_KEY and OPENAI_API_KEY in .env first.")
+    if settings.providers not in ("gemini", "cloud"):
+        sys.exit("Set PROVIDERS=gemini (or cloud) in .env; fake providers make no network calls to measure.")
+    print(f"providers: {settings.providers}")
     with wave.open("tests/data/utterance.wav") as w:
         pcm = w.readframes(w.getnframes())
     if not os.path.exists(IMAGE):
         sys.exit(f"{IMAGE} missing: run `make render` first.")
     jpeg = cv2.imencode(".jpg", cv2.imread(IMAGE), [cv2.IMWRITE_JPEG_QUALITY, 70])[1].tobytes()
-    stt, llm, tts, scene = OpenAISTT(), ClaudeLLM(), OpenAITTS(), ClaudeScene()
+    p = build_providers()
+    stt, llm, tts, scene = p.stt, p.llm, p.tts, p.scene
     t = {"stt": [], "llm": [], "tts_first": [], "scene": []}
     positions: dict[str, list[tuple[float, float]]] = {}
     for i in range(RUNS):
