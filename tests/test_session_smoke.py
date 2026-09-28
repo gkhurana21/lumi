@@ -426,3 +426,44 @@ def test_voice_falls_back_to_browser_speech_when_tts_fails(client, monkeypatch):
             recv_until(ws, is_state("engaged"))
     greetings = 3  # prefetched at session start, also failing
     assert len(calls) == greetings + 1  # the second line skipped the broken TTS (backoff) and went straight to speech
+
+
+def test_one_call_turn_hears_and_answers_without_separate_stt(client, monkeypatch):
+    from app.providers.fakes import FakeLLM, FakeSTT
+    from tests.test_providers import recorded_utterance
+
+    got = {}
+
+    async def respond_to_audio(self, *, audio, sr, history, memories, scene, mood):
+        got["bytes"], got["memories"] = len(audio), memories
+        return {"heard": "where is my mug?", "say": "Right there!", "emotion": "happy", "gesture": "nod",
+                "music": "none"}
+
+    async def no_stt(self, pcm16, sr=16000):
+        raise AssertionError("separate STT must not run")
+
+    monkeypatch.setattr(FakeLLM, "respond_to_audio", respond_to_audio, raising=False)
+    monkeypatch.setattr(FakeSTT, "transcribe", no_stt)
+    with client.websocket_connect("/ws") as ws:
+        ws.send_bytes(b"\x02frame")
+        recv_until(ws, lambda d: d["type"] == "scene")  # memory now holds the fake scene's mug
+        speak_audio(ws, recorded_utterance()[0])
+        _, seen = recv_until(ws, lambda d: d["type"] == "metrics")  # sent with the first audio chunk
+    texts = [(d["role"], d["text"]) for d in seen if d["type"] == "transcript"]
+    assert texts == [("user", "where is my mug?"), ("robot", "Right there!")]
+    assert got["bytes"] > 32000 and any("mug" in m for m in got["memories"])
+    assert [d for d in seen if d["type"] == "metrics"][0]["stt_ms"] == 0
+
+
+def test_one_call_turn_with_no_speech_aborts(client, monkeypatch):
+    from app.providers.fakes import FakeLLM
+    from tests.test_providers import recorded_utterance
+
+    async def respond_to_audio(self, **kw):
+        return {"heard": "", "say": "", "emotion": "neutral", "gesture": "none", "music": "none"}
+
+    monkeypatch.setattr(FakeLLM, "respond_to_audio", respond_to_audio, raising=False)
+    with client.websocket_connect("/ws") as ws:
+        speak_audio(ws, recorded_utterance()[0])
+        _, seen = recv_until(ws, lambda d: d["type"] == "state" and d["prev"] == "thinking")
+    assert seen[-1]["state"] == "engaged" and seen[-1]["event"] == "abort"

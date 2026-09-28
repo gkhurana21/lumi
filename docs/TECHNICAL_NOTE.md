@@ -42,7 +42,7 @@ The URDF is loaded in its own process (the GUI owns its main thread on macOS; a 
 | Goal, fake providers | aim settled 0.83 s, verified 1.33 s |
 | End of speech detected in steady noise | 0.1 to 0.35 s after speech, 10 of 10 conditions |
 | Engagement latency and flapping | not measured live; ~0.4 s first attending frame to greeting chime with scripted 5 fps frames |
-| STT / LLM / first audio, median and p90 | not measured (no API keys used yet); `make cloudcheck` |
+| End of speech to first audio (Gemini free tier) | 2.05 s median, 2.27 s p90 (one call hears and answers 1.60 s, streamed TTS 0.53 s); plus ~0.6 s VAD hangover |
 | Target machine CPU / memory | not measured (not run on Ubuntu); `scripts/measure_load.py --sim` |
 
 Dev machine: MacBook Air M3, 8 GB, built-in camera, mics and speakers. Measurement tools are in the repo: `make load`, `make trace`, `make cloudcheck`.

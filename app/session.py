@@ -292,16 +292,30 @@ class Session:
         t0 = self._t_end or time.perf_counter()
         marks: dict[str, float] = {}
         try:
-            text = utt if isinstance(utt, str) else (await self.p.stt.transcribe(utt) if utt else "")
-            marks["stt_ms"] = (time.perf_counter() - t0) * 1000
-            if not text.strip():
-                self.fsm.fire(Ev.ABORT)
-                return
-            self._emit({"type": "transcript", "role": "user", "text": text})
-            memories = await asyncio.to_thread(self.memory.search, text)
-            reply = await self.p.llm.respond(user_text=text, history=self.history[-10:], memories=memories,
-                                             scene=self.scene_now, mood=self.fsm.affect.label())
-            marks["llm_ms"] = (time.perf_counter() - t0) * 1000 - marks["stt_ms"]
+            if isinstance(utt, bytes) and utt and settings.one_call_turns and hasattr(self.p.llm, "respond_to_audio"):
+                # One call hears and answers. The question is not known as text beforehand, so the most recent
+                # objects stand in for a memory search.
+                memories = await asyncio.to_thread(self.memory.recent)
+                reply = await self.p.llm.respond_to_audio(audio=utt, sr=16000, history=self.history[-10:],
+                                                          memories=memories, scene=self.scene_now,
+                                                          mood=self.fsm.affect.label())
+                text = str(reply.get("heard", ""))
+                marks["stt_ms"], marks["llm_ms"] = 0.0, (time.perf_counter() - t0) * 1000
+                if not text.strip() or not str(reply.get("say", "")).strip():
+                    self.fsm.fire(Ev.ABORT)
+                    return
+                self._emit({"type": "transcript", "role": "user", "text": text})
+            else:
+                text = utt if isinstance(utt, str) else (await self.p.stt.transcribe(utt) if utt else "")
+                marks["stt_ms"] = (time.perf_counter() - t0) * 1000
+                if not text.strip():
+                    self.fsm.fire(Ev.ABORT)
+                    return
+                self._emit({"type": "transcript", "role": "user", "text": text})
+                memories = await asyncio.to_thread(self.memory.search, text)
+                reply = await self.p.llm.respond(user_text=text, history=self.history[-10:], memories=memories,
+                                                 scene=self.scene_now, mood=self.fsm.affect.label())
+                marks["llm_ms"] = (time.perf_counter() - t0) * 1000 - marks["stt_ms"]
             self.history += [{"role": "user", "content": text}, {"role": "assistant", "content": reply["say"]}]
             emotion = reply.get("emotion", "neutral")
             self.fsm.affect.set_emotion(emotion)

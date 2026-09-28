@@ -249,28 +249,41 @@ def test_gemini_scene_turns_boxes_into_aim_points():
     assert unb64(image["data"]) == jpeg and image["mime_type"] == "image/jpeg"
 
 
-def test_gemini_tts_returns_24k_chunks_and_resamples_other_rates():
+def test_gemini_tts_streams_24k_chunks_without_a_style_prompt():
     from app.providers.gemini import GeminiTTS
-    pcm24 = (np.sin(np.arange(24000) / 10) * 8000).astype("<i2").tobytes()  # 1 s at 24 kHz
-    pcm16 = (np.sin(np.arange(16000) / 10) * 8000).astype("<i2").tobytes()  # 1 s at 16 kHz
+    pcm = (np.sin(np.arange(24000) / 10) * 8000).astype("<i2").tobytes()  # 1 s at 24 kHz
+    pieces = [pcm[:9601], pcm[9601:30000], pcm[30000:]]  # an odd split, as a stream can deliver
     seen = {}
 
-    def serve(pcm, rate):
-        def handler(req):
-            seen.update(json.loads(req.content))
-            return httpx.Response(200, json=gemini_reply({"inlineData": {
-                "mimeType": f"audio/L16;codec=pcm;rate={rate}", "data": base64.b64encode(pcm).decode()}}))
-        return handler
+    def handler(req):
+        seen["path"], seen["body"] = req.url.path, json.loads(req.content)
+        events = "".join("data: " + json.dumps(gemini_reply({"inlineData": {
+            "mimeType": "audio/l16; rate=24000; channels=1", "data": base64.b64encode(p).decode()}})) + "\r\n\r\n"
+            for p in pieces)
+        return httpx.Response(200, content=events.encode(), headers={"content-type": "text/event-stream"})
 
-    async def collect(handler):
+    async def collect():
         return [c async for c in GeminiTTS(gemini(handler)).stream("Hello!")]
 
-    chunks = asyncio.run(collect(serve(pcm24, 24000)))
-    assert b"".join(chunks) == pcm24 and all(len(c) % 2 == 0 for c in chunks)
-    assert seen["generationConfig"]["responseModalities"] == ["AUDIO"]
-    assert seen["contents"][0]["parts"][0]["text"].endswith("Hello!")
-    resampled = b"".join(asyncio.run(collect(serve(pcm16, 16000))))
-    assert abs(len(resampled) // 2 - 24000) <= 2  # still one second, now at 24 kHz
+    chunks = asyncio.run(collect())
+    assert b"".join(chunks) == pcm and all(len(c) % 2 == 0 for c in chunks) and len(chunks) == 3
+    assert seen["path"].endswith(":streamGenerateContent")
+    assert seen["body"]["contents"][0]["parts"][0]["text"] == "Hello!"  # the text only: styles get read aloud
+    assert seen["body"]["generationConfig"]["responseModalities"] == ["AUDIO"]
+
+
+def test_gemini_audio_formats_become_24k_pcm():
+    from app.providers.gemini import _to_24k
+    pcm16 = (np.sin(np.arange(16000) / 10) * 8000).astype("<i2").tobytes()  # 1 s at 16 kHz
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(24000)
+        w.writeframes(pcm16)
+    assert _to_24k(buf.getvalue(), "audio/wav") == pcm16  # header stripped (it would play as a click)
+    assert abs(len(_to_24k(pcm16, "audio/L16;codec=pcm;rate=16000")) // 2 - 24000) <= 2  # resampled, same length
+    assert _to_24k(pcm16 + b"\x01", "audio/l16; rate=24000; channels=1") == pcm16  # odd byte dropped
 
 
 def test_gemini_providers_build_from_settings(monkeypatch):
@@ -281,3 +294,22 @@ def test_gemini_providers_build_from_settings(monkeypatch):
     monkeypatch.setattr(settings, "gemini_api_key", "test")
     p = build_providers()
     assert type(p.stt).__name__ == "GeminiSTT" and p.stt.c is p.llm.c is p.scene.c is p.tts.c
+
+
+def test_gemini_one_call_turn_sends_audio_and_returns_what_it_heard():
+    from app.providers.gemini import GeminiLLM
+    pcm, seen = recorded_utterance()[0], {}
+    reply = {"heard": "Hey Lumi, where did I leave my mug?", "say": "Left of your keyboard!", "emotion": "happy",
+             "gesture": "nod", "music": "none"}
+
+    def handler(req):
+        seen.update(json.loads(req.content))
+        return httpx.Response(200, json=gemini_reply({"functionCall": {"name": "respond", "args": reply}}))
+
+    out = asyncio.run(GeminiLLM(gemini(handler)).respond_to_audio(
+        audio=pcm, sr=16000, history=[], memories=["mug was left of the keyboard (2 min ago)"], scene=[], mood="calm"))
+    assert out == reply
+    audio = seen["contents"][-1]["parts"][0]["inlineData"]
+    assert audio["mime_type"] == "audio/wav" and len(unb64(audio["data"])) == 44 + len(pcm)
+    schema = seen["tools"][0]["functionDeclarations"][0]["parameters_json_schema"]
+    assert "heard" in schema["required"] and "left of the keyboard" in seen["systemInstruction"]["parts"][0]["text"]

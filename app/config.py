@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     gemini_fast_model: str = "gemini-3.5-flash-lite"  # speech-to-text and scene vision
     gemini_tts_model: str = "gemini-3.8-flash-lite-tts"
     gemini_voice: str = "Puck"
+    one_call_turns: bool = True  # gemini: send the utterance audio straight to the dialogue model (no separate STT)
     scene_interval_s: float = 4.0
     urdf_path: str = "robot/dummy_lamp_5dof.urdf"
     greet_cooldown_s: float = 45.0

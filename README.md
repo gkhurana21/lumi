@@ -133,7 +133,9 @@ Measured on the development machine (MacBook Air M3, 8 GB, macOS 26). Rows marke
 | Goal with fake providers | aim settled 0.83 s, verified 1.33 s | goal messages |
 | VAD end of utterance in steady noise | 0.1 to 0.35 s after speech, 10 of 10 noise conditions (was 3 of 10) | recorded utterance in white/pink/brown noise |
 | Engagement latency, flapping, disengagement | *not measured live*; by design ~0.4 s from the first attending frame to the greeting chime (scripted 5 fps frames) | `make fake`, use it, then `make trace` |
-| STT, LLM, first audio (median, p90) | *not measured* (no API keys used yet) | `make cloudcheck`; `make run` then `make trace` for live turns |
+| End of speech to first audio, Gemini free tier (median, p90) | **2.05 s, 2.27 s** one-call turn (heard + reply 1.60 s, first TTS audio 0.53 s); two-step STT + LLM + TTS would be 3.37 s | `make cloudcheck`, 3 runs, synthetic utterance, over home Wi-Fi; add ~0.6 s VAD hangover for spoken turns |
+| Scene scan, Gemini | 1.47 s median | same run |
+| Live turn latency | *not measured live* | `make run`, then `make trace` |
 | Ubuntu target CPU/memory | *not measured* (not run on Ubuntu) | `python scripts/measure_load.py 30 --sim` on the target |
 
 ## Hardware used

@@ -40,6 +40,12 @@ class SceneMemory:
         now = time.time()
         return [f'{m["name"]} was {m["location"]} ({_ago(now - m["last_seen"])})' for m in res["metadatas"][0]]
 
+    def recent(self, k: int = 12) -> list[str]:
+        """Most recently seen objects, newest first: context when the question is not known as text yet."""
+        metas = sorted(self.col.get()["metadatas"] or [], key=lambda m: -m["last_seen"])[:k]
+        now = time.time()
+        return [f'{m["name"]} was {m["location"]} ({_ago(now - m["last_seen"])})' for m in metas]
+
 
 def tokens(s: str) -> set[str]:
     return {w[:-1] if len(w) > 3 and w.endswith("s") else w for w in re.findall(r"[a-z0-9]+", s.lower())}
@@ -62,6 +68,11 @@ class InMemorySceneMemory:
         hits = sorted((h for h in hits if h[0]), key=lambda h: (-h[0], -h[1]["last_seen"]))
         now = time.time()
         return [f'{o["name"]} was {o.get("location", "")} ({_ago(now - o["last_seen"])})' for _, o in hits[:k]]
+
+    def recent(self, k: int = 12) -> list[str]:
+        objs = sorted(self._objs.values(), key=lambda o: -o["last_seen"])[:k]
+        now = time.time()
+        return [f'{o["name"]} was {o.get("location", "")} ({_ago(now - o["last_seen"])})' for o in objs]
 
 
 def make_memory(kind: str, path: str):

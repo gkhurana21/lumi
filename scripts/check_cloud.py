@@ -40,7 +40,7 @@ async def main() -> None:
     jpeg = cv2.imencode(".jpg", cv2.imread(IMAGE), [cv2.IMWRITE_JPEG_QUALITY, 70])[1].tobytes()
     p = build_providers()
     stt, llm, tts, scene = p.stt, p.llm, p.tts, p.scene
-    t = {"stt": [], "llm": [], "tts_first": [], "scene": []}
+    t = {"stt": [], "llm": [], "tts_first": [], "scene": [], "one_call": []}
     positions: dict[str, list[tuple[float, float]]] = {}
     for i in range(RUNS):
         t0 = time.perf_counter()
@@ -54,18 +54,32 @@ async def main() -> None:
         async for _ in tts.stream(reply["say"]):
             t["tts_first"].append((time.perf_counter() - t0) * 1000)
             break
+        if hasattr(llm, "respond_to_audio"):  # gemini: hear and answer in one call
+            t0 = time.perf_counter()
+            one = await llm.respond_to_audio(audio=pcm, sr=16000, history=[], scene=[], mood="curious",
+                                             memories=["mug was left of the keyboard (2 min ago)"])
+            t["one_call"].append((time.perf_counter() - t0) * 1000)
+            if i == 0:
+                print(f"one-call heard: {one.get('heard')!r} -> {one.get('say')!r}")
         t0 = time.perf_counter()
         objs = await scene.describe(jpeg)
         t["scene"].append((time.perf_counter() - t0) * 1000)
-        for o in objs:
+        firsts = {}
+        for o in objs:  # one box per name per frame: duplicates (two "lamp" boxes) would inflate the drift
             if "x" in o:
-                positions.setdefault(o["name"], []).append((o["x"], o["y"]))
+                firsts.setdefault(o["name"], (o["x"], o["y"]))
+        for name, xy in firsts.items():
+            positions.setdefault(name, []).append(xy)
         if i == 0:
             print(f"transcript: {text!r}\nreply: {reply}\nscene: {[o['name'] for o in objs]}\n")
     for k, xs in t.items():
-        print(f"{k:10s} {stats(xs)}   (n={len(xs)})")
+        if xs:
+            print(f"{k:10s} {stats(xs)}   (n={len(xs)})")
     total = [a + b + c for a, b, c in zip(t["stt"], t["llm"], t["tts_first"], strict=True)]
-    print(f"{'sum':10s} {stats(total)}   stt + llm + first TTS audio; add ~0.6 s VAD hangover for end-of-speech")
+    print(f"{'two-step':10s} {stats(total)}   stt + llm + first TTS audio (add ~0.6 s VAD hangover)")
+    if t["one_call"]:
+        one_total = [a + b for a, b in zip(t["one_call"], t["tts_first"], strict=True)]
+        print(f"{'one-call':10s} {stats(one_total)}   heard+reply + first TTS audio (what PROVIDERS=gemini uses)")
 
     print("\nscene position jitter on an identical image (calibrates MOVE_TOL in app/session.py):")
     for name, ps in positions.items():
