@@ -8,6 +8,7 @@ import logging
 import math
 import os
 import random
+import re
 import time
 
 from fastapi import WebSocket
@@ -28,6 +29,15 @@ SPOT_RGB = [1.0, 0.97, 0.9]  # near-white spotlight for goals
 MOVE_TOL = 0.25  # image units ([-1, 1] per axis): larger shift between aim and re-observation = the object moved
 AIM_TIMEOUT_S = 2.5
 TTS_CACHE = "data/tts_cache"
+# Seconds a sound effect (plus room echo) keeps the mic from opening a turn: the lamp must not answer its own chirp.
+SFX_GUARD_S = {"notice": 0.45, "greet": 0.55, "listen": 0.35, "sleep": 0.9, "error": 0.55, "spot": 0.5}
+FILLERS = {"um", "uh", "uhm", "hmm", "hm", "mm", "mhm", "ah", "oh", "er", "erm"}
+
+
+def real_words(text: str) -> bool:
+    """True if a transcript holds actual words: not empty, not only [noises] or *actions*, not only fillers."""
+    text = re.sub(r"\[[^\]]*\]|\([^)]*\)|\*[^*]*\*", " ", text)
+    return any(w.lower() not in FILLERS for w in re.findall(r"[^\W\d_]{2,}", text))
 TTS_BACKOFF_S = 60  # after a TTS failure (quota, network), the browser speaks for this long before TTS is retried
 
 
@@ -70,6 +80,8 @@ class Session:
         self._look: tuple[float, float] | None = None  # goal target overriding face gaze (camera frame, [-1, 1])
         self._tts_cache: dict[str, list[bytes]] = {}  # fixed lines synthesized once, so they land on their beat
         self._tts_down_until = 0.0
+        self._quiet_until = 0.0  # mic may not open a turn before this (the lamp's own sound effect is playing)
+        self._typed = False  # the turn being thought about was typed: the mic cannot preempt it
         self._trace_f = None
         if settings.trace_dir:
             os.makedirs(settings.trace_dir, exist_ok=True)
@@ -147,6 +159,12 @@ class Session:
     def _on_audio(self, pcm: bytes) -> None:
         for ev, utt in self.vad.feed(pcm):
             if ev == "start":
+                why = ("own sound effect" if time.monotonic() < self._quiet_until else
+                       "typed turn" if self.fsm.state == State.THINKING and self._typed else None)
+                if why:
+                    self.vad.flush()
+                    self._trace("vad", ev="ignored", why=why)
+                    continue
                 self._trace("vad", ev="start", during=self.fsm.state.value, strict=self.vad.strict)
                 self.fsm.fire(Ev.SPEECH_START)
             else:
@@ -161,6 +179,7 @@ class Session:
             self.fsm.fire(Ev.TTS_DONE)
             self._start_goal()
         elif t == "text" and m.get("text"):  # typed input for demos without a mic
+            self.vad.flush()  # whatever the mic was half-hearing is superseded by the typed words
             self.fsm.fire(Ev.SPEECH_START)
             self._pending = m["text"]
             self._t_end = time.perf_counter()
@@ -230,37 +249,43 @@ class Session:
             if prev == State.SPEAKING and ev != Ev.TTS_DONE:
                 self._purge_audio()
                 self._emit({"type": "stop_audio"})
-        self.vad.strict = nxt in (State.SPEAKING, State.ACTING)  # a cough should not cut off a reply or a goal
+        # A cough should not cut off a reply, a goal, or a reply being thought about (360 ms of voice, not 120 ms).
+        self.vad.strict = nxt in (State.SPEAKING, State.ACTING, State.THINKING)
 
         if nxt == State.NOTICING:
-            self._emit({"type": "sfx", "name": "notice"})
+            self._sfx("notice")
             self.body.gesture("perk")
         elif nxt == State.ENGAGED and prev == State.DISENGAGING:  # you looked back before it fell asleep
-            self._emit({"type": "sfx", "name": "notice"})
+            self._sfx("notice")
             self.body.gesture("perk")
         elif nxt == State.ENGAGED and prev in (State.IDLE, State.NOTICING):
             if time.monotonic() - self._last_greet > settings.greet_cooldown_s:
                 self._last_greet = time.monotonic()
                 self._spawn(self._greet())
         elif nxt == State.LISTENING:
-            self._emit({"type": "sfx", "name": "listen"})
+            self._sfx("listen")
         elif nxt == State.THINKING:
             utt, self._pending = self._pending, None
             if utt is None:
                 utt = self.vad.flush()
+            self._typed = isinstance(utt, str)
             self._reply = self._spawn(self._think(utt))
         elif nxt == State.ENGAGED and prev == State.SPEAKING and self._pending_music:
             self._set_music(self._pending_music)
             self._pending_music = None
         elif nxt == State.IDLE:
             if prev == State.DISENGAGING:  # a glance that never engaged just settles back, no sleep sound
-                self._emit({"type": "sfx", "name": "sleep"})
+                self._sfx("sleep")
             self._set_music("stop")
         if prev == State.ACTING and ev == Ev.TIMEOUT:  # the goal ran out of time: say so with sound and motion
-            self._emit({"type": "sfx", "name": "error"})
+            self._sfx("error")
             self.body.gesture("shake")
 
         self._emit({"type": "state", "state": nxt.value, "prev": prev.value, "event": ev.value})
+
+    def _sfx(self, name: str) -> None:
+        self._emit({"type": "sfx", "name": name})
+        self._quiet_until = max(self._quiet_until, time.monotonic() + SFX_GUARD_S.get(name, 0.5))
 
     def _cancel_reply(self) -> None:
         self._cancel(self._reply)
@@ -280,7 +305,7 @@ class Session:
 
     # ---------- mind ----------
     async def _greet(self) -> None:
-        self._emit({"type": "sfx", "name": "greet"})
+        self._sfx("greet")
         self.fsm.affect.set_emotion("happy")
         self.body.gesture("bounce")
         await asyncio.sleep(0.4)  # let the chirp + motion land before the voice
@@ -301,14 +326,14 @@ class Session:
                                                           mood=self.fsm.affect.label())
                 text = str(reply.get("heard", ""))
                 marks["stt_ms"], marks["llm_ms"] = 0.0, (time.perf_counter() - t0) * 1000
-                if not text.strip() or not str(reply.get("say", "")).strip():
+                if not real_words(text) or not str(reply.get("say", "")).strip():  # a cough, a noise: stay quiet
                     self.fsm.fire(Ev.ABORT)
                     return
                 self._emit({"type": "transcript", "role": "user", "text": text})
             else:
                 text = utt if isinstance(utt, str) else (await self.p.stt.transcribe(utt) if utt else "")
                 marks["stt_ms"] = (time.perf_counter() - t0) * 1000
-                if not text.strip():
+                if not real_words(text):
                     self.fsm.fire(Ev.ABORT)
                     return
                 self._emit({"type": "transcript", "role": "user", "text": text})
@@ -336,7 +361,7 @@ class Session:
         except Exception:
             log.exception("reply pipeline failed")
             self.fsm.affect.set_emotion("confused")
-            self._emit({"type": "sfx", "name": "error"})
+            self._sfx("error")
             self.fsm.fire(Ev.ABORT)
 
     async def _prefetch(self, lines: list[str]) -> None:
@@ -455,7 +480,7 @@ class Session:
                 await self._aim(obj)
                 if do == "spotlight" and self.body.light_override is None:
                     self.body.light_override = (SPOT_RGB, 1.0)
-                    self._emit({"type": "sfx", "name": "spot"})
+                    self._sfx("spot")
                 self._goal_step("observe", t0, why="verify")
                 seen = find_object(await self._observe(), want)
                 if seen is None or "x" not in seen:
@@ -475,7 +500,7 @@ class Session:
             raise
         except Exception:
             log.exception("goal failed")
-            self._emit({"type": "sfx", "name": "error"})
+            self._sfx("error")
             self.fsm.affect.set_emotion("confused")
             self.fsm.fire(Ev.ABORT)
 

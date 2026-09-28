@@ -19,8 +19,9 @@ from .cloud import FALLBACK_REPLY, RESPOND_TOOL, _pcm_to_wav, system_prompt
 
 log = logging.getLogger("gemini")
 
-STT_PROMPT = ("Transcribe the speech in this audio exactly as spoken, in its language. Reply with the words only. "
-              "If there is no speech, reply with nothing.")
+STT_PROMPT = ("Transcribe the speech in this audio exactly as spoken, in its language. Reply with the words only, "
+              "numbers written as words ('one second', never '0:01'). If there are no words (silence, a cough, "
+              "throat clearing, a noise), reply with nothing.")
 SCENE_PROMPT = ("Detect up to 12 distinct physical objects on or near the desk. For each give a short common name, "
                 "where it is relative to other objects or the frame, and box_2d as [ymin, xmin, ymax, xmax] "
                 "normalized to 0-1000. Ignore the person except for things they are holding.")
@@ -45,8 +46,9 @@ RESPOND_HEARD = copy.deepcopy(RESPOND_TOOL["input_schema"])
 RESPOND_HEARD["properties"]["heard"] = {"type": "string",
                                         "description": "The user's words in the audio, verbatim. Empty if no speech."}
 RESPOND_HEARD["required"] = ["heard", *RESPOND_HEARD["required"]]
-HEARD_NOTE = ("The user's latest turn is audio. Put their exact words in heard. If there is no speech in it, "
-              "set heard and say to empty strings.")
+HEARD_NOTE = ("The user's latest turn is audio. Put their exact words in heard, numbers written as words ('one "
+              "second', never '0:01'). If it holds no words addressed to you (silence, a cough, throat clearing, a "
+              "noise, background chatter), set heard and say to empty strings and do not reply.")
 
 
 def make_client() -> genai.Client:

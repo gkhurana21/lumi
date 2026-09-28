@@ -1,4 +1,5 @@
 """End-to-end over the real WebSocket with fake providers: no keys, camera, mic, or sim."""
+import asyncio
 import json
 import time
 import wave
@@ -467,3 +468,69 @@ def test_one_call_turn_with_no_speech_aborts(client, monkeypatch):
         speak_audio(ws, recorded_utterance()[0])
         _, seen = recv_until(ws, lambda d: d["type"] == "state" and d["prev"] == "thinking")
     assert seen[-1]["state"] == "engaged" and seen[-1]["event"] == "abort"
+
+
+def test_real_words_filters_noises_and_fillers():
+    from app.session import real_words
+    assert real_words("one second") and real_words("where is my mug?") and real_words("Hey Lumi")
+    for noise in ("", "   ", "[coughs]", "*clears throat*", "(background chatter)", "um", "uh... hmm", "0:01", "..."):
+        assert not real_words(noise), noise
+
+
+def test_a_cough_is_not_answered(client, monkeypatch):
+    from app.providers.fakes import FakeLLM
+    from tests.test_providers import recorded_utterance
+
+    async def respond_to_audio(self, **kw):  # a model that describes the noise instead of leaving heard empty
+        return {"heard": "*clears throat*", "say": "Need a drink?", "emotion": "curious", "gesture": "tilt",
+                "music": "none"}
+
+    monkeypatch.setattr(FakeLLM, "respond_to_audio", respond_to_audio, raising=False)
+    with client.websocket_connect("/ws") as ws:
+        speak_audio(ws, recorded_utterance()[0])
+        _, seen = recv_until(ws, lambda d: d["type"] == "state" and d["prev"] == "thinking")
+    assert seen[-1]["event"] == "abort" and not [d for d in seen if d["type"] == "transcript"]
+    assert "error" not in [d.get("name") for d in seen if d["type"] == "sfx"]  # dropped silently
+
+
+def _speech(seconds: float) -> bytes:
+    import numpy as np
+
+    from tests.test_providers import WAV
+    with wave.open(WAV) as w:
+        speech = np.frombuffer(w.readframes(w.getnframes()), np.int16)
+    return speech[9000:9000 + int(16000 * seconds)].tobytes()  # starts right at the voice onset
+
+
+def test_the_lamps_own_chirp_does_not_open_a_turn(client, live, monkeypatch):
+    monkeypatch.setattr(settings, "greet_cooldown_s", 1e12)
+    with client.websocket_connect("/ws") as ws:
+        frames(ws, b"look", 2)
+        recv_until(ws, is_state("noticing"), limit=60)  # the notice chirp just started playing
+        speak_audio(ws, _speech(0.3))  # heard inside the chirp guard: the lamp's own sound
+        seen = []
+        while sum(d["type"] == "body" for d in seen) < 4:
+            seen.append(recv_until(ws, lambda d: True)[0])
+        assert "listening" not in [d.get("state") for d in seen]
+        time.sleep(0.5)  # guard over
+        speak_audio(ws, _speech(0.6))
+        recv_until(ws, is_state("listening"), limit=60)  # real speech still opens a turn
+
+
+def test_a_typed_message_survives_mic_noise(client, monkeypatch):
+    from app.providers.fakes import FakeLLM
+    orig = FakeLLM.respond
+
+    async def slow(self, **kw):  # a slower cloud: the reply is still being thought about when the noise comes
+        await asyncio.sleep(1.5)
+        return await orig(self, **kw)
+
+    monkeypatch.setattr(FakeLLM, "respond", slow)
+    with client.websocket_connect("/ws") as ws:
+        ws.send_text(json.dumps({"type": "text", "text": "what do you see on my desk?"}))
+        recv_until(ws, is_state("thinking"))
+        time.sleep(0.5)  # past the listen blip's echo guard, so only the typed-turn rule can protect the reply
+        speak_audio(ws, _speech(2.2))  # someone talks nearby, long enough to pass the strict start threshold
+        _, seen = recv_until(ws, lambda d: d["type"] == "tts_start", limit=200)
+    assert "listening" not in [d.get("state") for d in seen]
+    assert [d["text"] for d in seen if d["type"] == "transcript" and d["role"] == "robot"]
