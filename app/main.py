@@ -34,6 +34,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.mount("/client", StaticFiles(directory="client", html=True), name="client")
+app.mount("/robot", StaticFiles(directory="robot"), name="robot")  # URDF + mesh for the browser's 3D view
 
 
 @app.get("/")

@@ -146,7 +146,8 @@ def run_goal(ws, text):
     say(ws, text)  # acknowledgement, then playback_done -> ENGAGED -> GOAL
     _, seen = recv_until(ws, lambda d: d["type"] == "tts_end")  # outcome line
     ws.send_text(json.dumps({"type": "playback_done"}))
-    _, after = recv_until(ws, is_state("engaged"), limit=60)
+    recv_until(ws, is_state("engaged"), limit=60)
+    after, _ = recv_until(ws, lambda d: d["type"] == "body")  # first body frame after the goal is released
     return seen, after
 
 
@@ -164,10 +165,11 @@ def test_goal_spotlights_the_mug_after_rechecking_the_scene(client, monkeypatch)
     lit = [d for d in seen if d["type"] == "body" and d["light"]["brightness"] == 1.0]
     assert lit and lit[-1]["joints"]["base_yaw_joint"] > 0.05  # mug is image-left: lamp turns to its left
     assert lit[-1].get("focus") == "mug"  # the sim labels the lit spot with the target's name
+    speaking_lit = [d for d in lit if d.get("focus") and d["joints"]["elbow_pitch_joint"] < -0.8]
+    assert speaking_lit, "the lamp keeps leaning over the target (ACTING pose, elbow -0.9) during the outcome line"
     outcome = [d["text"] for d in seen if d["type"] == "transcript" and d["role"] == "robot"][-1]
     assert "mug" in outcome and "spotlight" in outcome
-    bodies = [d for d in after if d["type"] == "body"]
-    assert not bodies or (bodies[-1]["light"]["brightness"] < 1.0 and "focus" not in bodies[-1])  # released
+    assert after["light"]["brightness"] < 1.0 and "focus" not in after  # spotlight released after the outcome
 
 
 def test_goal_reaims_when_the_target_moved(client, monkeypatch):
@@ -534,3 +536,12 @@ def test_a_typed_message_survives_mic_noise(client, monkeypatch):
         _, seen = recv_until(ws, lambda d: d["type"] == "tts_start", limit=200)
     assert "listening" not in [d.get("state") for d in seen]
     assert [d["text"] for d in seen if d["type"] == "transcript" and d["role"] == "robot"]
+
+
+def test_session_says_hello_and_serves_the_robot_for_the_3d_view(client):
+    with client.websocket_connect("/ws") as ws:
+        hello = json.loads(ws.receive_text())
+    assert hello["type"] == "hello" and hello["providers"] == "fake" and hello["urdf"].endswith(".urdf")
+    urdf = client.get(hello["urdf"])
+    assert urdf.status_code == 200 and "lamp_head_link" in urdf.text
+    assert client.get("/robot/assets/lamp_shade.stl").status_code == 200

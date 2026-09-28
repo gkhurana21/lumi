@@ -130,7 +130,9 @@ class Body:
         now = time.monotonic()
         t = now - self.t0
         ar = (affect.arousal + 1) / 2  # 0..1
-        tgt = {r: POSES[state].get(r, 0.0) for r in self.map}
+        # While a goal target is in focus the lamp keeps leaning over it, even while it speaks the outcome line.
+        pose = POSES[State.ACTING] if self.focus and state == State.SPEAKING else POSES[state]
+        tgt = {r: pose.get(r, 0.0) for r in self.map}
         if state in LOOKING:
             for role, k in GAZE_YAW.items():
                 if role in tgt:

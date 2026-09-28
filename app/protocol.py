@@ -13,7 +13,9 @@ def pack(kind: Frame, payload: bytes) -> bytes:
 
 # JSON control messages
 # client -> server: {"type":"playback_done"} | {"type":"text","text":"..."} (typed input, bypasses STT)
-# server -> client: state | transcript | scene | body | sfx | music | tts_start | tts_end | stop_audio | goal | speak
+# server -> client: hello | state | transcript | scene | body | sfx | music | tts_start | tts_end | stop_audio |
+#                   goal | speak
+# hello: {providers, urdf, one_call}  first message of every session (the client loads the URDF for its 3D view)
 # speak: {text}  TTS unavailable: the browser speaks the line itself, then sends playback_done
 # goal: {step: start|observe|aim|verify|done|failed, ms since goal start, ...step details}
 # body: {joints, light: {rgb, brightness}, mood, va, focus?: goal target name while aiming,

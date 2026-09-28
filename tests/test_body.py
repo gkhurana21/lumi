@@ -125,3 +125,25 @@ def test_light_link_is_the_emitter():
     finally:
         p.disconnect(cid)
     assert light_link(["arm", "lamp_shade"]) == 1 and light_link(["a", "b"]) == 1
+
+
+def test_goal_focus_keeps_the_lean_while_speaking():
+    from app.body import behaviors
+    from app.body.behaviors import POSES
+
+    clock = type("Clock", (), {"t": 0.0, "monotonic": lambda self: self.t})()
+    orig, behaviors.time = behaviors.time, clock
+    try:
+        b = Body(URDF)
+        b.focus = "mug"
+        for _ in range(80):
+            f = b.update(State.SPEAKING, Affect(), (-0.5, 0.6), 0.05)
+            clock.t += 0.05
+        assert abs(f["joints"]["elbow_pitch_joint"] - POSES[State.ACTING]["elbow"]) < 0.05
+        b.focus = None
+        for _ in range(80):
+            f = b.update(State.SPEAKING, Affect(), (0.0, 0.0), 0.05)
+            clock.t += 0.05
+        assert abs(f["joints"]["elbow_pitch_joint"] - POSES[State.SPEAKING]["elbow"]) < 0.05
+    finally:
+        behaviors.time = orig

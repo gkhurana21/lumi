@@ -129,6 +129,8 @@ class Session:
                 await self.ws.send_text(item)
 
     async def run(self) -> None:
+        self._emit({"type": "hello", "providers": settings.providers, "urdf": "/robot/" + os.path.basename(
+            settings.urdf_path), "one_call": settings.one_call_turns and hasattr(self.p.llm, "respond_to_audio")})
         self._spawn(self._sender())
         self._spawn(self._ticker())
         if hasattr(self.attn, "warm"):
@@ -513,7 +515,7 @@ class Session:
             look = self._look if self._look is not None else self._gaze
             frame = self.body.update(self.fsm.state, self.fsm.affect, look, dt)
             n += 1
-            if n % 4 == 0:  # 5 Hz to the UI, 20 Hz to the sim
+            if n % 2 == 0:  # 10 Hz to the browser (its 3D lamp interpolates between frames), 20 Hz to the sim
                 a = self.fsm.affect
                 self._emit({"type": "body", **frame, "mood": a.label(),
                             "va": [round(a.valence, 2), round(a.arousal, 2)], "face": self._face})

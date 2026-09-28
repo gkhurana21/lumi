@@ -4,9 +4,9 @@ A 5-DOF desk lamp character that notices you looking at it, greets you with moti
 
 ![The simulated lamp: idle, engaged, spotlighting a mug, dancing](docs/img/lamp_states.png)
 
-Every behavior is decided locally in one Python process; the cloud only supplies words and scene descriptions. The browser dashboard shows what the lamp sees and feels while it runs:
+Every behavior is decided locally in one Python process; the cloud only supplies words and scene descriptions. The browser dashboard renders the lamp in 3D from the supplied URDF, driven by the same joint targets as the PyBullet body, with a real spotlight and shadows, and shows what the lamp sees, feels, says, remembers, and is doing:
 
-![Dashboard during a goal: face view, scene memory with the target highlighted, goal steps with timings, light, mood, conversation](docs/img/dashboard.png)
+![Dashboard mid-goal: the lamp leans over the desk and spotlights the mug while it speaks; goal steps with timings, face view, memory, mood, conversation](docs/img/dashboard.png)
 
 ## Run
 
@@ -20,7 +20,7 @@ bash deploy/setup_ubuntu.sh   # apt packages, Chromium, venv on Python 3.12, pin
 make run                      # or run at login: deploy/lumi.service (systemd user unit, instructions inside)
 ```
 
-Open http://localhost:8000 in **Chromium or Chrome**, press Start, allow camera + mic. Put the dashboard and the PyBullet window side by side. Camera and mic are read by the browser (V4L2, PipeWire/PulseAudio), so the Python side needs no audio or camera drivers. The PyBullet window shows the body; `SIM=false` skips it on a headless box. Headphones are not needed (browser echo cancellation plus a stricter VAD while the lamp speaks), but they make barge-in more reliable.
+Open http://localhost:8000 in **Chromium or Chrome**, press Start, allow camera + mic. The dashboard's 3D view shows the lamp (its libraries load from jsDelivr; offline it falls back to the PyBullet window, which always runs alongside). Camera and mic are read by the browser (V4L2, PipeWire/PulseAudio), so the Python side needs no audio or camera drivers. The PyBullet window shows the body; `SIM=false` skips it on a headless box. Headphones are not needed (browser echo cancellation plus a stricter VAD while the lamp speaks), but they make barge-in more reliable.
 
 **macOS (development):** `make install` builds a patched pybullet first (no arm64 wheel; about 2 min), then the same commands.
 

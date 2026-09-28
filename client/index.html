@@ -1,84 +1,121 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lumi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0d0e12;--panel:#15171e;--line:#252834;--text:#e6e7eb;--dim:#8b90a0;--accent:#5b6170;--glow:#000}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
-header{display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--line)}
-h1{font-size:18px;margin:0;letter-spacing:.02em}
-h1 small{color:var(--dim);font-weight:400;margin-left:8px}
-button,input{font:inherit;color:var(--text);background:#1c1f28;border:1px solid var(--line);border-radius:8px;padding:8px 12px}
-button{cursor:pointer}button.primary{background:#f5c451;color:#15120a;border:0;font-weight:600}
-main{display:grid;grid-template-columns:minmax(300px,440px) 1fr;gap:16px;padding:16px 20px}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
-.panel h2{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin:0 0 10px;font-weight:600}
-.eyes{position:relative;aspect-ratio:4/3;border-radius:10px;overflow:hidden;background:#000}
-.eyes video,.eyes canvas{position:absolute;inset:0;width:100%;height:100%}
-.eyes video{transform:scaleX(-1);object-fit:cover;opacity:.85}
-.seeing{position:absolute;left:10px;bottom:10px;padding:3px 10px;border-radius:99px;background:#000a;font-size:12px}
-.meter{height:6px;border-radius:3px;background:#222633;margin-top:10px;overflow:hidden}
-.meter i{display:block;height:100%;width:0;background:linear-gradient(90deg,#4ade80,#f5c451,#f87171);transition:width 60ms}
-.row{display:flex;gap:16px;align-items:center}
-.orb{width:84px;height:84px;border-radius:50%;flex:none;background:var(--glow);box-shadow:0 0 36px 6px var(--glow);transition:background .15s,box-shadow .15s}
-.state{font-size:26px;font-weight:700;color:var(--accent);text-transform:capitalize;transition:color .2s}
-.caption{color:var(--dim);font-size:13px}
-.pad{position:relative;width:110px;height:110px;flex:none;border:1px solid var(--line);border-radius:10px;background:
-  linear-gradient(var(--line),var(--line)) 50% 0/1px 100% no-repeat,linear-gradient(90deg,var(--line),var(--line)) 0 50%/100% 1px no-repeat}
-.pad i{position:absolute;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:#f5c451;box-shadow:0 0 12px #f5c451;transition:left .2s,top .2s}
+:root{--bg:#07080b;--glass:rgba(255,255,255,.045);--edge:rgba(255,255,255,.09);--text:#eceef3;--dim:#8a90a2;--accent:#6b7285;--glow:#000;--warm:#ffcf6e}
+*{box-sizing:border-box}html,body{height:100%}
+body{margin:0;background:radial-gradient(1200px 700px at 30% 20%,#131722 0,var(--bg) 60%);color:var(--text);font:14px/1.45 Inter,system-ui,sans-serif;overflow:hidden}
+header{height:60px;display:flex;align-items:center;gap:12px;padding:0 22px;border-bottom:1px solid var(--edge)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;letter-spacing:.01em}
+.brand i{width:12px;height:12px;border-radius:50%;background:var(--glow);box-shadow:0 0 14px 3px var(--glow);transition:background .2s,box-shadow .2s}
+.brand small{font-weight:400;color:var(--dim);font-size:13px}
+.chip{padding:4px 10px;border-radius:99px;border:1px solid var(--edge);background:var(--glass);color:var(--dim);font-size:12px;white-space:nowrap}
+.chip b{color:var(--text);font-weight:600}
+button,input{font:inherit;color:var(--text)}
+.go{border:0;border-radius:10px;padding:9px 18px;font-weight:600;background:var(--warm);color:#1b1407;cursor:pointer;box-shadow:0 6px 24px #ffcf6e33}
+.go:disabled{opacity:.55;cursor:default;box-shadow:none}
+main{display:grid;grid-template-columns:1fr 420px;height:calc(100% - 60px)}
+.stage{position:relative;overflow:hidden}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.hud{position:absolute;z-index:2;pointer-events:none}
+.tl{left:22px;top:20px}.tr{right:20px;top:20px}.tc{left:50%;top:20px;transform:translateX(-50%)}.br{right:20px;bottom:20px;max-width:46%;text-align:right}
+.panel{background:rgba(12,14,19,.62);border:1px solid var(--edge);border-radius:16px;padding:12px 14px;backdrop-filter:blur(14px)}
+.state{display:flex;align-items:center;gap:12px}
+.state .dot{width:14px;height:14px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 0 var(--accent);animation:pulse 1.8s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 60%,transparent)}70%{box-shadow:0 0 0 12px transparent}100%{box-shadow:0 0 0 0 transparent}}
+#st{font-size:28px;font-weight:700;text-transform:capitalize;color:var(--accent);transition:color .25s;letter-spacing:-.01em}
+#cap{color:var(--dim);font-size:13px;margin-top:2px;max-width:360px}
+.bars{display:none;gap:3px;align-items:flex-end;height:18px}.bars i{width:3px;background:var(--accent);border-radius:2px;animation:eq .9s infinite ease-in-out}
+.bars i:nth-child(2){animation-delay:.15s}.bars i:nth-child(3){animation-delay:.3s}.bars i:nth-child(4){animation-delay:.45s}
+@keyframes eq{0%,100%{height:4px}50%{height:18px}}
+body.speaking .bars{display:flex}
+.pad{position:relative;width:96px;height:96px;border-radius:12px;border:1px solid var(--edge);background:
+  linear-gradient(var(--edge),var(--edge)) 50% 0/1px 100% no-repeat,linear-gradient(90deg,var(--edge),var(--edge)) 0 50%/100% 1px no-repeat}
+.pad i{position:absolute;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:var(--warm);box-shadow:0 0 14px var(--warm);transition:left .25s,top .25s}
 .pad span{position:absolute;font-size:10px;color:var(--dim)}
+.mood{display:flex;gap:12px;align-items:center}.mood b{display:block;font-size:15px;text-transform:capitalize}.mood small{color:var(--dim)}
+.label{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:600;margin:0 0 8px}
 .steps{display:flex;gap:6px;flex-wrap:wrap}
-.steps span{padding:4px 10px;border-radius:99px;background:#1c1f28;color:var(--dim);font-size:12px}
-.steps span.on{background:#f5c451;color:#15120a}.steps span.bad{background:#f87171;color:#1a0a0a}
-.chips{display:flex;gap:6px;flex-wrap:wrap;min-height:28px}
-.chips span{padding:4px 10px;border-radius:8px;background:#1c1f28;font-size:12px}
-.chips span.focus{background:#fff4d6;color:#15120a;box-shadow:0 0 14px #f5c45180}
-.chat{display:flex;flex-direction:column;gap:8px;height:280px;overflow-y:auto;padding-right:4px}
-.b{max-width:82%;padding:8px 12px;border-radius:14px;background:#1c1f28}
-.b.user{align-self:flex-end;background:#243049}.b small{display:block;color:var(--dim);font-size:11px;margin-top:2px}
-.say{display:flex;gap:8px;margin-top:10px}.say input{flex:1}
-details{margin-top:12px}summary{color:var(--dim);cursor:pointer;font-size:12px}
-#log{height:160px;overflow:auto;font:11px ui-monospace,monospace;color:var(--dim);margin-top:6px}
-.grid2{display:grid;gap:16px}
-@media (max-width:900px){main{grid-template-columns:1fr}}
-</style></head>
+.steps span{padding:4px 10px;border-radius:99px;background:rgba(255,255,255,.06);color:var(--dim);font-size:12px;transition:all .2s}
+.steps span.on{background:var(--warm);color:#1b1407}.steps span.bad{background:#f87171;color:#1a0a0a}
+.chips{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.chips span{padding:4px 10px;border-radius:8px;background:rgba(255,255,255,.07);font-size:12px;transition:all .25s}
+.chips span.focus{background:#fff3d4;color:#1b1407;box-shadow:0 0 18px #ffcf6e88}
+#tag3d{position:absolute;z-index:3;transform:translate(-50%,-140%);padding:4px 10px;border-radius:99px;background:#fff3d4;color:#1b1407;font-weight:600;font-size:12px;box-shadow:0 0 22px #ffcf6e99;display:none;pointer-events:none}
+.cta{position:absolute;left:0;right:0;bottom:26px;display:flex;flex-direction:column;align-items:center;gap:10px;z-index:4;pointer-events:none}
+.cta button{pointer-events:auto;font-size:16px;padding:12px 26px}
+.cta p{margin:0;color:var(--dim)}
+.fallback{position:absolute;inset:0;display:none;align-items:center;justify-content:center;color:var(--dim);z-index:1;text-align:center;padding:30px}
+aside{border-left:1px solid var(--edge);display:flex;flex-direction:column;gap:14px;padding:16px;min-height:0}
+.card{background:var(--glass);border:1px solid var(--edge);border-radius:16px;padding:12px}
+.eyes{position:relative;aspect-ratio:4/3;border-radius:12px;overflow:hidden;background:#000}
+.eyes video,.eyes canvas{position:absolute;inset:0;width:100%;height:100%}
+.eyes video{transform:scaleX(-1);object-fit:cover;opacity:.9}
+.seeing{position:absolute;left:10px;bottom:10px;padding:4px 10px;border-radius:99px;background:#000b;font-size:12px;display:flex;gap:6px;align-items:center}
+.seeing i{width:8px;height:8px;border-radius:50%;background:#555}
+.meter{height:4px;border-radius:3px;background:rgba(255,255,255,.08);margin-top:10px;overflow:hidden}
+.meter i{display:block;height:100%;width:0;background:linear-gradient(90deg,#4ade80,#facc15,#f87171);transition:width 60ms}
+.chat-card{flex:1;display:flex;flex-direction:column;min-height:0}
+#chat{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:2px 2px 6px;scroll-behavior:smooth}
+.b{max-width:86%;padding:9px 12px;border-radius:16px;background:rgba(255,255,255,.07);animation:in .25s ease-out}
+.b.user{align-self:flex-end;background:#2b3a5c;border-bottom-right-radius:6px}.b.lumi{border-bottom-left-radius:6px}
+.b small{display:flex;gap:6px;align-items:center;color:var(--dim);font-size:11px;margin-top:3px}.b small i{width:7px;height:7px;border-radius:50%}
+.b.typing{color:var(--dim);font-style:italic}
+@keyframes in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+form{display:flex;gap:8px;margin-top:8px}
+form input{flex:1;background:rgba(0,0,0,.35);border:1px solid var(--edge);border-radius:10px;padding:10px 12px;outline:none}
+form input:focus{border-color:#ffcf6e88}
+form button{border:0;border-radius:10px;padding:0 14px;background:rgba(255,255,255,.1);cursor:pointer;font-weight:600}
+details summary{color:var(--dim);cursor:pointer;font-size:12px}
+#log{max-height:150px;overflow:auto;font:11px/1.5 'JetBrains Mono',ui-monospace,monospace;color:var(--dim);margin-top:6px}
+@media (max-width:980px){body{overflow:auto}main{grid-template-columns:1fr;height:auto}.stage{height:62vh}aside{border-left:0}}
+</style>
+<script type="importmap">{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/":"https://cdn.jsdelivr.net/npm/three@0.169.0/",
+  "urdf-loader":"https://cdn.jsdelivr.net/npm/urdf-loader@0.12.3/src/URDFLoader.js"}}</script>
+</head>
 <body>
-<header><h1>Lumi <small>live character lamp</small></h1><span style="flex:1"></span>
-  <button id="go" class="primary">Start</button></header>
+<header>
+  <div class="brand"><i></i>Lumi <small>live character lamp</small></div>
+  <span style="flex:1"></span>
+  <span class="chip" id="prov">not connected</span><span class="chip" id="lat">reply time <b>-</b></span>
+  <button class="go" id="go">Start</button>
+</header>
 <main>
-  <div class="grid2">
-    <section class="panel"><h2>What Lumi sees</h2>
+  <section class="stage" id="stage">
+    <canvas id="c3d"></canvas>
+    <div class="fallback" id="noGL">The 3D view needs WebGL and an internet connection for its libraries.<br>The PyBullet window shows the body.</div>
+    <div class="hud tl panel"><div class="state"><span class="dot"></span><div><div style="display:flex;gap:10px;align-items:center"><span id="st">asleep</span><span class="bars"><i></i><i></i><i></i><i></i></span></div><div id="cap">Press Start, then look at the camera.</div></div></div></div>
+    <div class="hud tr panel mood"><div class="pad" title="mood: valence (x) and arousal (y)"><span style="left:5px;top:3px">excited</span><span style="right:5px;bottom:3px">calm</span><i id="dot" style="left:50%;top:80%"></i></div><div><b id="mood">sleepy</b><small>mood</small></div></div>
+    <div class="hud tc panel" id="goalPanel" style="display:none"><div class="label">Goal</div><div class="steps" id="steps"></div></div>
+    <div class="hud br panel"><div class="label">Lumi remembers</div><div class="chips" id="scene"><span>nothing yet</span></div></div>
+    <div id="tag3d"></div>
+    <div class="cta" id="cta"><button class="go" id="go2">Wake Lumi</button><p>Allow camera and microphone. Look at the camera to say hi.</p></div>
+  </section>
+  <aside>
+    <div class="card"><div class="label">What Lumi sees</div>
       <div class="eyes"><video id="v" autoplay muted playsinline></video><canvas id="ov"></canvas>
-        <span class="seeing" id="seeing">camera off</span></div>
-      <div class="meter" title="microphone level"><i id="lvl"></i></div>
-    </section>
-    <section class="panel"><h2>Scene memory</h2><div class="chips" id="scene"><span>nothing seen yet</span></div></section>
-    <section class="panel"><h2>Goal</h2><div class="steps" id="steps"><span>none yet</span></div></section>
-  </div>
-  <div class="grid2">
-    <section class="panel"><div class="row">
-      <div class="orb" id="orb" title="lamp light"></div>
-      <div style="flex:1"><div class="state" id="st">offline</div><div class="caption" id="cap">Press Start and allow camera and mic.</div></div>
-      <div class="pad" title="mood: valence (x) and arousal (y)"><span style="left:4px;top:2px">excited</span>
-        <span style="right:4px;bottom:2px">calm</span><i id="dot" style="left:50%;top:80%"></i></div>
-      <div style="width:70px;text-align:center"><div id="mood" style="font-weight:600">-</div><div class="caption">mood</div></div>
-    </div></section>
-    <section class="panel"><h2>Conversation</h2><div class="chat" id="chat"></div>
-      <div class="say"><input id="txt" placeholder="Type instead of speaking, e.g. shine your light on my mug"><button id="send">Send</button></div>
-      <details><summary>Event log</summary><div id="log"></div></details>
-    </section>
-  </div>
+        <span class="seeing"><i id="seeDot"></i><span id="seeing">camera off</span></span></div>
+      <div class="meter" title="microphone level"><i id="lvl"></i></div></div>
+    <div class="card chat-card"><div class="label">Conversation</div><div id="chat"></div>
+      <form id="say"><input id="txt" autocomplete="off" placeholder="Type to Lumi, e.g. shine your light on my mug"><button>Send</button></form></div>
+    <details class="card"><summary>Event log</summary><div id="log"></div></details>
+  </aside>
 </main>
-<script>
+<script type="module">
 const FR = {AUDIO_IN: 1, VIDEO_IN: 2, AUDIO_OUT: 3};
 const $ = id => document.getElementById(id);
 let ws, micCtx, out, playHead = 0, muted = false, sources = [], doneTimer, music = null, speaking = null;
 const log = s => { const d = document.createElement('div'); d.textContent = `${new Date().toLocaleTimeString()}  ${s}`; $('log').prepend(d); };
 const pack = (k, buf) => { const u = new Uint8Array(buf.byteLength + 1); u[0] = k; u.set(new Uint8Array(buf), 1); return u.buffer; };
 
+// ---------- state HUD ----------
 const STATES = {
-  offline: ['#5b6170', 'Press Start and allow camera and mic.'], idle: ['#5b6170', 'Resting. Look at the camera to wake me.'],
-  noticing: ['#f5c451', 'Oh? Someone is there.'], engaged: ['#4ade80', 'I see you. Talk to me.'],
+  asleep: ['#6b7285', 'Press Start, then look at the camera.'], idle: ['#6b7285', 'Resting. Look at the camera to wake me.'],
+  noticing: ['#facc15', 'Oh? Someone is there.'], engaged: ['#4ade80', 'I see you. Talk to me, or type below.'],
   listening: ['#60a5fa', 'Listening...'], thinking: ['#c084fc', 'Thinking...'], speaking: ['#f472b6', 'Speaking. Talk over me to interrupt.'],
   acting: ['#fbbf24', 'On it: aiming, lighting, checking the scene.'], disengaging: ['#94a3b8', 'You looked away... getting sleepy.'],
 };
@@ -86,23 +123,25 @@ function showState(s) {
   const [c, cap] = STATES[s] || STATES.idle;
   document.documentElement.style.setProperty('--accent', c);
   $('st').textContent = s; $('cap').textContent = cap;
+  document.body.classList.toggle('speaking', s === 'speaking');
+  typing(s === 'thinking');
 }
 
-// Mic -> 16 kHz PCM16, 20 ms frames
+// ---------- capture: mic -> 16 kHz PCM16 in 20 ms frames, camera -> JPEG at 5 fps ----------
 const WORKLET = `class Cap extends AudioWorkletProcessor{constructor(){super();this.b=new Int16Array(320);this.i=0}
 process(inp){const c=inp[0][0];if(!c)return true;for(let k=0;k<c.length;k++){const s=Math.max(-1,Math.min(1,c[k]));
 this.b[this.i++]=s<0?s*32768:s*32767;if(this.i===320){this.port.postMessage(this.b.buffer.slice(0));this.i=0}}return true}}
 registerProcessor('cap',Cap)`;
 
 async function start() {
-  $('go').disabled = true; $('go').textContent = 'Running';
+  $('go').disabled = true; $('go').textContent = 'Running'; $('cta').style.display = 'none';
   const stream = await navigator.mediaDevices.getUserMedia({
     video: {width: 640, height: 480},
     audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true}});
   $('v').srcObject = stream;
   ws = new WebSocket(`ws://${location.host}/ws`); ws.binaryType = 'arraybuffer';
   ws.onopen = () => showState('idle');
-  ws.onclose = () => { showState('offline'); $('go').disabled = false; $('go').textContent = 'Start'; };
+  ws.onclose = () => { showState('asleep'); $('prov').textContent = 'not connected'; $('go').disabled = false; $('go').textContent = 'Start'; };
   ws.onmessage = onMsg;
 
   micCtx = new AudioContext({sampleRate: 16000});  // Chrome resamples the mic for us
@@ -118,24 +157,26 @@ async function start() {
 
   out = new AudioContext({sampleRate: 24000});
   const cv = document.createElement('canvas'); cv.width = 640; cv.height = 480; const g = cv.getContext('2d');
-  setInterval(() => {  // ~5 fps; server drops frames while busy
+  setInterval(() => {  // ~5 fps; the server drops frames while busy
     if (ws.readyState !== 1) return;
     g.drawImage($('v'), 0, 0, 640, 480);
     cv.toBlob(b => b && b.arrayBuffer().then(a => ws.send(pack(FR.VIDEO_IN, a))), 'image/jpeg', 0.7);
   }, 200);
 }
 
-// ---- what the lamp sees: face box from the server's local detector, drawn over the mirrored preview ----
+// ---------- what the lamp sees: the server's face reading over the mirrored preview ----------
 function drawFace(f) {
   const c = $('ov'), g = c.getContext('2d'); c.width = c.clientWidth; c.height = c.clientHeight; g.clearRect(0, 0, c.width, c.height);
+  const col = !f ? '#555' : f.attending ? '#4ade80' : '#facc15';
+  $('seeDot').style.background = col;
   if (!f) { $('seeing').textContent = ws ? 'no one in view' : 'camera off'; return; }
   const w = f.w * c.width, h = (f.h || f.w * 4 / 3) * c.height, x = (1 - (f.x + 1) / 2) * c.width - w / 2, y = (f.y + 1) / 2 * c.height - h / 2;
-  const col = f.attending ? '#4ade80' : '#f5c451';
-  g.strokeStyle = col; g.lineWidth = 3; g.shadowColor = col; g.shadowBlur = 12; g.strokeRect(x, y, w, h);
-  $('seeing').textContent = f.attending ? 'you are looking at me' : 'I see you (looking away)';
+  g.strokeStyle = col; g.lineWidth = 3; g.shadowColor = col; g.shadowBlur = 14;
+  const r = 10; g.beginPath(); g.roundRect(x, y, w, h, r); g.stroke();
+  $('seeing').textContent = f.attending ? 'you are looking at me' : 'I see you, looking away';
 }
 
-// ---- voice ----
+// ---------- voice ----------
 function playPCM(buf) {
   if (muted) return;
   const i16 = new Int16Array(buf), f = new Float32Array(i16.length);
@@ -154,12 +195,12 @@ function speakLocally(text) {
   const u = new SpeechSynthesisUtterance(text), voices = speechSynthesis.getVoices();
   u.voice = voices.find(v => /en[-_]US/.test(v.lang) && /Samantha|Google US English|Aria|Jenny/.test(v.name))
     || voices.find(v => v.lang.startsWith('en')) || null;
-  u.pitch = 1.35; u.rate = 1.05;  // a small, bright voice
+  u.pitch = 1.35; u.rate = 1.05;
   u.onend = u.onerror = () => { if (!u.cancelled && ws) ws.send(JSON.stringify({type: 'playback_done'})); if (speaking === u) speaking = null; };
   speaking = u; speechSynthesis.speak(u);
 }
 
-// ---- sound effects: [startHz, endHz, seconds] ----
+// ---------- sound effects [startHz, endHz, seconds] and generative music, tempo-locked to the dance ----------
 const SFX = {notice: [[500, 900, .12]], greet: [[523, 784, .09], [784, 1175, .14]], listen: [[880, 880, .05]],
              sleep: [[700, 220, .6]], error: [[320, 180, .25]], spot: [[660, 1320, .08], [1320, 1320, .12]]};
 function sfx(name) {
@@ -171,8 +212,6 @@ function sfx(name) {
     o.connect(e).connect(out.destination); o.start(t); o.stop(t + d + .02); t += d;
   }
 }
-
-// ---- generative music (no licensed audio), tempo matches the server's dance BPM ----
 const SCALES = {happy: [0, 4, 7, 12, 7, 4, 9, 7], chill: [0, 3, 7, 10, 12, 10, 7, 3]};
 function startMusic(mood, bpm) {
   stopMusic();
@@ -197,29 +236,42 @@ function startMusic(mood, bpm) {
 function stopMusic() { if (!music) return; clearInterval(music.id); music.g.gain.setTargetAtTime(0, out.currentTime, .2); music = null; }
 const duck = on => music && music.g.gain.setTargetAtTime(on ? .025 : .12, out.currentTime, .1);
 
-// ---- panels ----
-function bubble(role, text, note) {
+// ---------- conversation, memory, goal ----------
+const EMO = {happy: '#facc15', excited: '#fb923c', curious: '#60a5fa', surprised: '#f472b6', shy: '#f9a8d4',
+             confused: '#a78bfa', sad: '#64748b', annoyed: '#f87171', sleepy: '#94a3b8', neutral: '#9ca3af'};
+let typingEl = null;
+function typing(on) {
+  if (on && !typingEl) { typingEl = document.createElement('div'); typingEl.className = 'b lumi typing'; typingEl.textContent = 'Lumi is thinking...'; $('chat').append(typingEl); }
+  if (!on && typingEl) { typingEl.remove(); typingEl = null; }
+  $('chat').scrollTop = $('chat').scrollHeight;
+}
+function bubble(role, text, emotion) {
+  typing(false);
   const d = document.createElement('div'); d.className = 'b ' + role; d.textContent = text;
-  if (note) { const s = document.createElement('small'); s.textContent = note; d.append(s); }
+  if (emotion) { const s = document.createElement('small'); const i = document.createElement('i'); i.style.background = EMO[emotion] || '#9ca3af'; s.append(i, emotion); d.append(s); }
   $('chat').append(d); $('chat').scrollTop = $('chat').scrollHeight;
 }
 let focus = null, sceneNames = [];
 function drawScene() {
-  $('scene').replaceChildren(...(sceneNames.length ? sceneNames : ['nothing seen yet']).map(n => {
+  $('scene').replaceChildren(...(sceneNames.length ? sceneNames : ['nothing yet']).map(n => {
     const s = document.createElement('span'); s.textContent = n; if (n === focus) s.className = 'focus'; return s; }));
 }
 const STEPS = ['start', 'aim', 'observe', 'verify', 'done'];
 function goalStep(m) {
+  $('goalPanel').style.display = '';
   if (m.step === 'start') $('steps').replaceChildren(...STEPS.map(n => { const s = document.createElement('span'); s.dataset.step = n; s.textContent = n; return s; }));
   const el = $('steps').querySelector(`[data-step="${m.step === 'failed' ? 'done' : m.step}"]`);
-  if (el) { el.className = m.step === 'failed' ? 'bad' : 'on'; el.textContent = `${m.step === 'failed' ? 'failed' : m.step} ${m.ms} ms`; }
+  if (el) { el.className = m.step === 'failed' ? 'bad' : 'on'; el.textContent = `${m.step === 'failed' ? 'failed' : m.step} ${(m.ms / 1000).toFixed(1)} s`; }
   $('steps').querySelectorAll('span').forEach(s => { if (STEPS.indexOf(s.dataset.step) < STEPS.indexOf(m.step)) s.classList.add('on'); });
 }
 
+// ---------- messages from the server ----------
 function onMsg(e) {
   if (e.data instanceof ArrayBuffer) { if (new Uint8Array(e.data)[0] === FR.AUDIO_OUT) playPCM(e.data.slice(1)); return; }
   const m = JSON.parse(e.data);
   switch (m.type) {
+    case 'hello': $('prov').innerHTML = {gemini: '<b>Gemini</b>' + (m.one_call ? ' one call' : ''), cloud: '<b>Claude</b> + OpenAI', fake: '<b>offline</b> canned speech'}[m.providers] || m.providers;
+      if (m.urdf && m.urdf !== lampUrl) loadLamp(m.urdf); break;
     case 'state': showState(m.state); log(`${m.prev} -> ${m.state}  (${m.event})`);
       duck(['listening', 'thinking', 'speaking'].includes(m.state)); break;
     case 'tts_start': muted = false; clearTimeout(doneTimer); break;
@@ -230,7 +282,8 @@ function onMsg(e) {
     case 'sfx': sfx(m.name); log(`sfx: ${m.name}`); break;
     case 'music': m.action === 'play' ? startMusic(m.mood, m.bpm) : stopMusic(); log(`music: ${m.action} ${m.mood || ''}`); break;
     case 'transcript': m.role === 'user' ? bubble('user', m.text) : bubble('lumi', m.text, m.emotion); break;
-    case 'metrics': log(`latency: ${Object.entries(m).filter(([k]) => k !== 'type').map(([k, v]) => `${k} ${v}`).join(', ')}`); break;
+    case 'metrics': $('lat').innerHTML = `reply time <b>${(m.first_audio_ms / 1000).toFixed(1)} s</b>`;
+      log(`latency: ${Object.entries(m).filter(([k]) => k !== 'type').map(([k, v]) => `${k} ${v}`).join(', ')}`); break;
     case 'scene': sceneNames = m.objects.map(o => o.name); drawScene(); break;
     case 'goal': goalStep(m); log(`goal ${m.step} +${m.ms} ms ${m.target || m.why || ''}`); break;
     case 'body': {
@@ -238,12 +291,142 @@ function onMsg(e) {
       $('dot').style.left = (m.va[0] + 1) * 50 + '%'; $('dot').style.top = (1 - m.va[1]) * 50 + '%';
       const k = .3 + .7 * m.light.brightness, [r, g, b] = m.light.rgb.map(c => Math.round(c * 255 * k));
       document.documentElement.style.setProperty('--glow', `rgb(${r},${g},${b})`);
+      Object.assign(jointTarget, m.joints); lightTarget.rgb = m.light.rgb; lightTarget.k = m.light.brightness;
       if ((m.focus || null) !== focus) { focus = m.focus || null; drawScene(); }
       drawFace(m.face); break; }
   }
 }
-$('go').onclick = start;
-$('send').onclick = () => { if (ws && $('txt').value.trim()) ws.send(JSON.stringify({type: 'text', text: $('txt').value})); $('txt').value = ''; };
-$('txt').onkeydown = e => e.key === 'Enter' && $('send').click();
+$('go').onclick = $('go2').onclick = start;
+$('say').onsubmit = e => {
+  e.preventDefault();
+  const text = $('txt').value.trim();
+  if (!text) return;
+  if (!ws || ws.readyState !== 1) { log('press Start first'); $('txt').placeholder = 'Press Start first, then type here'; return; }
+  ws.send(JSON.stringify({type: 'text', text})); $('txt').value = '';
+};
+
+// ---------- 3D stage: the supplied URDF, driven by the same joint targets as the PyBullet window ----------
+const jointTarget = {shoulder_pitch_joint: 0.25, elbow_pitch_joint: -1.6, head_pitch_joint: -0.45};  // asleep until connected
+const lightTarget = {rgb: [1, 0.8, 0.6], k: 0.1};
+let lampUrl = null, loadLamp = () => {};
+(async () => {
+  let THREE, OrbitControls, URDFLoader, RoomEnvironment, mergeVertices;
+  try {
+    THREE = await import('three');
+    ({OrbitControls} = await import('three/examples/jsm/controls/OrbitControls.js'));
+    ({RoomEnvironment} = await import('three/examples/jsm/environments/RoomEnvironment.js'));
+    ({mergeVertices} = await import('three/examples/jsm/utils/BufferGeometryUtils.js'));
+    URDFLoader = (await import('urdf-loader')).default;
+  } catch (err) { $('noGL').style.display = 'flex'; log('3D view unavailable: ' + err.message); return; }
+
+  const stage = $('stage'), canvas = $('c3d');
+  const renderer = new THREE.WebGLRenderer({canvas, antialias: true, alpha: true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0x07080b, 2.2, 5.5);
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  const camera = new THREE.PerspectiveCamera(32, 1, 0.01, 20);
+  camera.position.set(-1.85, 1.08, 1.45);
+  const controls = new OrbitControls(camera, canvas);
+  controls.target.set(-0.42, 0.26, 0.1); controls.enableDamping = true; controls.maxPolarAngle = 1.48;
+  controls.minDistance = 0.6; controls.maxDistance = 3.2; controls.enablePan = false;
+
+  scene.add(new THREE.HemisphereLight(0x6f7fa8, 0x1a120c, 0.25));
+  const rim = new THREE.DirectionalLight(0x9fb4ff, 0.35); rim.position.set(1.2, 1.6, -1.4); scene.add(rim);
+  const desk = new THREE.Mesh(new THREE.CircleGeometry(2.4, 96), new THREE.MeshStandardMaterial({color: 0x3b2d23, roughness: .82, metalness: 0}));
+  desk.rotation.x = -Math.PI / 2; desk.receiveShadow = true; scene.add(desk);
+
+  // light: a real spotlight that casts shadows, a glow at the shade, and a soft additive beam
+  const spot = new THREE.SpotLight(0xffffff, 0, 3.5, 0.5, 0.6, 1.2);
+  spot.castShadow = true; spot.shadow.mapSize.set(1024, 1024); spot.shadow.bias = -0.0004; spot.shadow.camera.near = 0.02;
+  scene.add(spot, spot.target);
+  const halo = new THREE.PointLight(0xffffff, 0, 0.7, 2); scene.add(halo);
+  const BEAM_H = 0.85, beamGeo = new THREE.ConeGeometry(BEAM_H * Math.tan(0.42), BEAM_H, 64, 1, true);
+  beamGeo.translate(0, -BEAM_H / 2, 0);  // apex at the origin, opening toward -Y
+  const beamMat = new THREE.ShaderMaterial({transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    uniforms: {color: {value: new THREE.Color()}, strength: {value: 0}},
+    vertexShader: `varying float vT; varying vec3 vN; varying vec3 vV;
+      void main(){ vT = -position.y / ${BEAM_H.toFixed(3)}; vec4 mv = modelViewMatrix * vec4(position, 1.);
+        vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform vec3 color; uniform float strength; varying float vT; varying vec3 vN; varying vec3 vV;
+      void main(){ float edge = pow(abs(dot(vN, vV)), 2.0); float fall = pow(1. - clamp(vT, 0., 1.), 1.7);
+        gl_FragColor = vec4(color * strength * edge * fall, 1.); }`});
+  const beam = new THREE.Mesh(beamGeo, beamMat); beam.renderOrder = 2; scene.add(beam);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.075, 0.09, 48), new THREE.MeshBasicMaterial({color: 0xffe6a8, transparent: true, opacity: 0, depthWrite: false}));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.002; scene.add(ring);
+
+  const root = new THREE.Group(); root.rotation.x = -Math.PI / 2; scene.add(root);  // URDF is z-up, three.js is y-up
+  let lamp = null, emitter = null; const glowMats = [];
+  function styleLamp(robot) {  // standard materials, shadows, smooth shade; the lens and bulb glow with the light
+    glowMats.length = 0;
+    robot.traverse(o => {
+      if (!o.isMesh || o.userData.styled) return;
+      o.userData.styled = true;
+      o.castShadow = o.receiveShadow = true;
+      if (!o.geometry.index) {  // the STL shade: faceted, wound inward; weld vertices and smooth its normals
+        o.geometry.deleteAttribute('normal'); o.geometry = mergeVertices(o.geometry, 1e-4); o.geometry.computeVertexNormals();
+      }
+      const name = (o.material && o.material.name) || '';
+      const std = new THREE.MeshStandardMaterial({color: o.material.color, roughness: .38, metalness: .05, envMapIntensity: .35,
+                                                  side: THREE.DoubleSide});
+      if (name.includes('chrome')) Object.assign(std, {roughness: .22, metalness: .92, envMapIntensity: .6});
+      if (name.includes('black')) Object.assign(std, {roughness: .5});
+      if (name.includes('light')) { std.userData.glow = true; o.castShadow = false; }
+      o.material = std;
+    });
+    robot.traverse(o => { if (o.isMesh && o.material.userData.glow) glowMats.push(o.material); });
+  }
+  loadLamp = url => {
+    lampUrl = url;
+    const manager = new THREE.LoadingManager();
+    const loader = new URDFLoader(manager);
+    let robot = null;
+    manager.onLoad = () => { if (!robot) return; styleLamp(robot); log('3D lamp loaded from ' + url); };  // after the STL too
+    loader.load(url, r => {
+      robot = r;
+      if (lamp) root.remove(lamp);
+      lamp = r; emitter = r.links.light_emitter_link;
+      styleLamp(r); root.add(r);
+    }, undefined, err => log('could not load the lamp: ' + err));
+  };
+  loadLamp('/robot/dummy_lamp_5dof.urdf');
+
+  const shown = {}, col = new THREE.Color(1, .8, .6), tmpCol = new THREE.Color(), p = new THREE.Vector3(), q = new THREE.Quaternion(),
+        dir = new THREE.Vector3(), down = new THREE.Vector3(0, -1, 0), tag = $('tag3d');
+  let k = 0.1;
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage); resize();
+  renderer.setAnimationLoop(() => {
+    if (lamp) {
+      for (const [name, v] of Object.entries(jointTarget)) {  // ease between the server's 10 Hz frames
+        shown[name] = shown[name] ?? v; shown[name] += (v - shown[name]) * 0.2;
+        if (lamp.joints[name]) lamp.setJointValue(name, shown[name]);
+      }
+      root.updateMatrixWorld(true);
+      emitter.getWorldPosition(p); emitter.getWorldQuaternion(q); dir.set(1, 0, 0).applyQuaternion(q).normalize();
+      col.lerp(tmpCol.setRGB(...lightTarget.rgb), .15); k += (lightTarget.k - k) * .15;
+      spot.position.copy(p); spot.target.position.copy(p).addScaledVector(dir, 1); spot.target.updateMatrixWorld();
+      spot.color.copy(col); spot.intensity = 0.4 + 9 * k * k + 3 * k;
+      halo.position.copy(p).addScaledVector(dir, 0.05); halo.color.copy(col); halo.intensity = 0.05 + 0.5 * k;
+      beam.position.copy(p); beam.quaternion.setFromUnitVectors(down, dir);
+      beamMat.uniforms.color.value.copy(col); beamMat.uniforms.strength.value = 0.04 + 0.34 * k;
+      for (const m of glowMats) m.emissive.copy(col).multiplyScalar(0.25 + 2.2 * k);
+      const reach = dir.y < -0.05 ? -p.y / dir.y : Infinity;
+      if (focus && reach < 2) {
+        ring.position.set(p.x + dir.x * reach, 0.002, p.z + dir.z * reach); ring.material.opacity = 0.65 + 0.3 * Math.sin(performance.now() / 180);
+        const s = ring.position.clone().project(camera);
+        tag.style.display = 'block'; tag.textContent = focus;
+        tag.style.left = (s.x + 1) / 2 * stage.clientWidth + 'px'; tag.style.top = (1 - s.y) / 2 * stage.clientHeight + 'px';
+      } else { ring.material.opacity = 0; tag.style.display = 'none'; }
+    }
+    controls.update(); renderer.render(scene, camera);
+  });
+})();
 </script>
 </body></html>
