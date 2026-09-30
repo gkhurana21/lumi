@@ -193,9 +193,9 @@ function stopVoice() {
 // Fallback when the server's TTS is unavailable (quota, network): the browser speaks, then reports playback_done.
 function speakLocally(text) {
   const u = new SpeechSynthesisUtterance(text), voices = speechSynthesis.getVoices();
-  u.voice = voices.find(v => /en[-_]US/.test(v.lang) && /Samantha|Google US English|Aria|Jenny/.test(v.name))
-    || voices.find(v => v.lang.startsWith('en')) || null;
-  u.pitch = 1.35; u.rate = 1.05;
+  u.voice = voices.find(v => /Daniel|Google UK English Male|Arthur|Ryan/.test(v.name))  // a British male voice, like the server's
+    || voices.find(v => /en[-_]GB/.test(v.lang)) || voices.find(v => v.lang.startsWith('en')) || null;
+  u.pitch = 0.95; u.rate = 1.02;
   u.onend = u.onerror = () => { if (!u.cancelled && ws) ws.send(JSON.stringify({type: 'playback_done'})); if (speaking === u) speaking = null; };
   speaking = u; speechSynthesis.speak(u);
 }

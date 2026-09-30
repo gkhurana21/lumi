@@ -16,7 +16,9 @@ class Settings(BaseSettings):
     gemini_llm_model: str = "gemini-3.5-flash-lite"   # dialogue; fast lite models get the most free-tier quota
     gemini_fast_model: str = "gemini-3.5-flash-lite"  # speech-to-text and scene vision
     gemini_tts_model: str = "gemini-3.8-flash-lite-tts"
-    gemini_voice: str = "Puck"
+    gemini_voice: str = "Charon"       # calm, deep, measured; alternatives: Iapetus, Algieba, Orus, Sadaltager
+    gemini_voice_lang: str = "en-GB"   # British English delivery
+    gemini_thinking: str = "MINIMAL"   # dialogue thinking: 0.97 s vs 1.32 s per turn at the default; "" = default
     one_call_turns: bool = True  # gemini: send the utterance audio straight to the dialogue model (no separate STT)
     scene_interval_s: float = 4.0
     urdf_path: str = "robot/dummy_lamp_5dof.urdf"

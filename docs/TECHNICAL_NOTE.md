@@ -43,7 +43,7 @@ The URDF is loaded in its own process (the GUI owns its main thread on macOS; a 
 | End of speech detected in steady noise | 0.1 to 0.35 s after speech, 10 of 10 conditions |
 | Engagement (live) | 387 ms first attending frame to ENGAGED; no flapping in 2 min of sitting |
 | Reply time (live, 7 turns) | 2.20 s median, 2.45 s p90 from end of speech to first audio; 0 of 12 utterances were speaker echo |
-| End of speech to first audio (Gemini free tier) | 2.05 s median, 2.27 s p90 (one call hears and answers 1.60 s, streamed TTS 0.53 s); plus ~0.6 s VAD hangover |
+| End of speech to first audio (Gemini free tier) | 1.50 s median, 1.75 s p90 (one call hears and answers 0.96 s, streamed TTS 0.54 s); plus a 0.45 s end-of-speech wait |
 | Target machine CPU / memory | not measured (not run on Ubuntu); `scripts/measure_load.py --sim` |
 
 Dev machine: MacBook Air M3, 8 GB, built-in camera, mics and speakers. Measurement tools are in the repo: `make load`, `make trace`, `make cloudcheck`.

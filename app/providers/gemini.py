@@ -57,6 +57,13 @@ def make_client() -> genai.Client:
     return genai.Client(api_key=settings.gemini_api_key or None, http_options=opts)
 
 
+def _thinking() -> dict:
+    """Dialogue thinking level (MINIMAL answered in 0.97 s vs 1.32 s at the default, measured on the one-call turn)."""
+    if not settings.gemini_thinking:
+        return {}
+    return {"thinking_config": types.ThinkingConfig(thinking_level=settings.gemini_thinking)}
+
+
 def _forced(name: str, schema: dict, description: str, **extra) -> types.GenerateContentConfig:
     """Force exactly one call of the named function, so the reply is always parseable structured data."""
     fn = types.FunctionDeclaration(name=name, description=description, parameters_json_schema=schema)
@@ -107,7 +114,7 @@ class GeminiLLM:
         contents = self._history(history)
         contents.append(types.Content(role="user", parts=[types.Part.from_text(text=user_text)]))
         config = _forced("respond", RESPOND_TOOL["input_schema"], RESPOND_TOOL["description"],
-                         system_instruction=system_prompt(scene, memories, mood), max_output_tokens=300)
+                         system_instruction=system_prompt(scene, memories, mood), max_output_tokens=300, **_thinking())
         r = await self.c.aio.models.generate_content(model=settings.gemini_llm_model, contents=contents, config=config)
         return _args(r, "respond") or dict(FALLBACK_REPLY)
 
@@ -116,7 +123,7 @@ class GeminiLLM:
         contents = self._history(history)
         contents.append(types.Content(role="user", parts=[
             types.Part.from_bytes(data=_pcm_to_wav(audio, sr), mime_type="audio/wav")]))
-        config = _forced("respond", RESPOND_HEARD, RESPOND_TOOL["description"], max_output_tokens=400,
+        config = _forced("respond", RESPOND_HEARD, RESPOND_TOOL["description"], max_output_tokens=400, **_thinking(),
                          system_instruction=system_prompt(scene, memories, mood) + "\n" + HEARD_NOTE)
         r = await self.c.aio.models.generate_content(model=settings.gemini_llm_model, contents=contents, config=config)
         return _args(r, "respond") or {**FALLBACK_REPLY, "heard": ""}
@@ -150,8 +157,9 @@ class GeminiTTS:
 
     async def stream(self, text: str):
         voice = types.VoiceConfig(prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=settings.gemini_voice))
+        speech = types.SpeechConfig(voice_config=voice, language_code=settings.gemini_voice_lang or None)
         config = types.GenerateContentConfig(response_modalities=["AUDIO"], automatic_function_calling=NO_AFC,
-                                             speech_config=types.SpeechConfig(voice_config=voice))
+                                             speech_config=speech)
         got, carry = False, b""
         async for chunk in await self.c.aio.models.generate_content_stream(
                 model=settings.gemini_tts_model, contents=text, config=config):

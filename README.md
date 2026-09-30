@@ -133,9 +133,9 @@ Measured on the development machine (MacBook Air M3, 8 GB, macOS 26); live rows 
 | Goal with fake providers | aim settled 0.83 s, verified 1.33 s | goal messages |
 | VAD end of utterance in steady noise | 0.1 to 0.35 s after speech, 10 of 10 noise conditions (was 3 of 10) | recorded utterance in white/pink/brown noise |
 | Engagement (live) | 387 ms from the first attending frame to ENGAGED; no flapping in 2 min of sitting (0 disengagements, face in 100% of frames, \|yaw\| p90 0.16); disengagement not measured live | session trace, `make trace` |
-| End of speech to first audio, Gemini free tier (median, p90) | **2.05 s, 2.27 s** one-call turn (heard + reply 1.60 s, first TTS audio 0.53 s); two-step STT + LLM + TTS would be 3.37 s | `make cloudcheck`, 3 runs, synthetic utterance, over home Wi-Fi; add ~0.6 s VAD hangover for spoken turns |
+| End of speech to first audio, Gemini free tier (median, p90) | **1.50 s, 1.75 s** one-call turn (hears and answers 0.96 s with MINIMAL thinking, first TTS audio 0.54 s); was 2.05 s with default thinking, 6.8 s before streaming and one-call | `make cloudcheck`, 3 runs, synthetic utterance; plus the 0.45 s end-of-speech wait for spoken turns |
 | Scene scan, Gemini | 1.47 s median | same run |
-| Reply time (live) | first audio 2.20 s median, 2.45 s p90, 2.81 s max after the end of speech, 7 turns (Gemini free tier, office Wi-Fi) | session trace |
+| Reply time (live) | first audio 2.20 s median, 2.45 s p90, 2.81 s max after the end of speech, 7 turns (Gemini free tier, office Wi-Fi, before the MINIMAL-thinking and 0.45 s end-of-speech changes) | session trace |
 | Speaker echo (live) | 0 of 12 utterances started while the lamp was speaking (laptop speakers, no headphones) | session trace |
 | Ubuntu target CPU/memory | *not measured* (not run on Ubuntu) | `python scripts/measure_load.py 30 --sim` on the target |
 
@@ -152,7 +152,7 @@ Two interchangeable cloud setups; the data sent is the same, only the recipient 
 | Utterance audio (WAV, only between VAD start/end) | Google Gemini | OpenAI transcription | each turn | fast, accurate STT without a local model |
 | Transcript, short history, retrieved memories, mood | Google Gemini | Anthropic Claude | each turn | character dialogue + structured emotion, gesture, music, goal |
 | One camera JPEG every `SCENE_INTERVAL_S` (15 s by default), plus one per goal re-observation | Google Gemini | Anthropic Claude | continuously; during goals | object names, locations, and image positions (boxes) for memory and goal aiming |
-| Reply text; the 3 fixed greeting lines once ever (cached on disk) | Google Gemini TTS | OpenAI TTS | each turn | expressive voice as PCM |
+| Reply text; the 3 fixed greeting lines once ever (cached on disk) | Google Gemini TTS (voice Charon, en-GB) | OpenAI TTS | each turn | a calm British voice as PCM |
 
 If cloud TTS fails (quota, network), the line goes to the browser's built-in speech instead, so the lamp never goes silent; nothing extra leaves the machine.
 

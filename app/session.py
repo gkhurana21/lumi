@@ -23,7 +23,8 @@ from .providers import Providers
 
 log = logging.getLogger("session")
 
-GREETINGS = ["Oh! Hi there.", "Hey, you! I was hoping you'd look over.", "Hello hello!"]
+GREETINGS = ["Good to see you. How can I help?", "Welcome back. At your service.",
+             "Ah, there you are. What can I do for you?"]
 MUSIC_BPM = {"happy": 112, "chill": 84}
 SPOT_RGB = [1.0, 0.97, 0.9]  # near-white spotlight for goals
 MOVE_TOL = 0.25  # image units ([-1, 1] per axis): larger shift between aim and re-observation = the object moved
@@ -476,7 +477,8 @@ class Session:
                 obj = find_object(await self._observe(), want)
             if obj is None or "x" not in obj:
                 self._goal_step("failed", t0, why="not visible")
-                return await self._goal_outcome(f"Hmm, I can't spot your {want} right now.", "confused", "shake")
+                return await self._goal_outcome(f"I'm afraid I can't see your {want} at the moment.",
+                                                "confused", "shake")
             for attempt in range(2):
                 self._goal_step("aim", t0, target=obj["name"], x=obj["x"], y=obj["y"])
                 await self._aim(obj)
@@ -487,17 +489,18 @@ class Session:
                 seen = find_object(await self._observe(), want)
                 if seen is None or "x" not in seen:
                     self._goal_step("failed", t0, why="lost after aiming")
-                    return await self._goal_outcome(f"Huh, your {want} vanished on me.", "surprised", "shake")
+                    return await self._goal_outcome(f"Your {want} appears to have vanished.", "surprised", "shake")
                 moved = math.hypot(seen["x"] - obj["x"], seen["y"] - obj["y"])
                 self._goal_step("verify", t0, moved=round(moved, 3))
                 if moved <= MOVE_TOL:
                     self._goal_step("done", t0, attempts=attempt + 1)
-                    text = (f"There! Your {seen['name']} is in my spotlight." if do == "spotlight"
+                    text = (f"Done. Your {seen['name']} is in the spotlight." if do == "spotlight"
                             else f"There's your {seen['name']}.")
-                    return await self._goal_outcome(("Caught it moving. " if attempt else "") + text, "happy", "nod")
+                    text = ("It moved, so I followed it. " if attempt else "") + text
+                    return await self._goal_outcome(text, "happy", "nod")
                 obj = seen  # it moved: re-aim once at the new position
             self._goal_step("failed", t0, why="kept moving")
-            await self._goal_outcome(f"Your {want} won't sit still!", "confused", "tilt")
+            await self._goal_outcome(f"Your {want} won't hold still, I'm afraid.", "confused", "tilt")
         except asyncio.CancelledError:
             raise
         except Exception:

@@ -313,3 +313,42 @@ def test_gemini_one_call_turn_sends_audio_and_returns_what_it_heard():
     assert audio["mime_type"] == "audio/wav" and len(unb64(audio["data"])) == 44 + len(pcm)
     schema = seen["tools"][0]["functionDeclarations"][0]["parameters_json_schema"]
     assert "heard" in schema["required"] and "left of the keyboard" in seen["systemInstruction"]["parts"][0]["text"]
+
+
+def _find(obj, *keys):  # the SDK mixes camelCase and snake_case when it serializes configs
+    for k in keys:
+        if isinstance(obj, dict) and k in obj:
+            return obj[k]
+    return None
+
+
+def test_gemini_requests_carry_voice_language_and_fast_thinking():
+    from app.providers.gemini import GeminiLLM, GeminiTTS
+    seen = []
+
+    def handler(req):
+        body = json.loads(req.content)
+        seen.append(body)
+        if req.url.path.endswith(":streamGenerateContent"):
+            pcm = base64.b64encode(b"\x00\x01" * 2400).decode()
+            event = gemini_reply({"inlineData": {"mimeType": "audio/l16; rate=24000", "data": pcm}})
+            return httpx.Response(200, content=f"data: {json.dumps(event)}\r\n\r\n".encode(),
+                                  headers={"content-type": "text/event-stream"})
+        return httpx.Response(200, json=gemini_reply({"functionCall": {"name": "respond", "args": {
+            "heard": "hi", "say": "Good evening.", "emotion": "neutral", "gesture": "none", "music": "none"}}}))
+
+    client = gemini(handler)
+
+    async def go():
+        await GeminiLLM(client).respond_to_audio(audio=b"\x00\x00" * 1600, sr=16000, history=[], memories=[], scene=[],
+                                                 mood="calm")
+        return [c async for c in GeminiTTS(client).stream("Good evening.")]
+
+    asyncio.run(go())
+    llm_cfg, tts_cfg = seen[0]["generationConfig"], seen[1]["generationConfig"]
+    thinking = _find(llm_cfg, "thinkingConfig", "thinking_config")
+    assert thinking and _find(thinking, "thinkingLevel", "thinking_level") == "MINIMAL"
+    speech = _find(tts_cfg, "speechConfig", "speech_config")
+    assert _find(speech, "languageCode", "language_code") == "en-GB"
+    voice = json.dumps(speech)
+    assert "Charon" in voice

@@ -181,7 +181,7 @@ def test_goal_reaims_when_the_target_moved(client, monkeypatch):
     assert aims == [-0.5, 0.3]
     last = [d for d in seen if d["type"] == "goal"][-1]
     assert last["step"] == "done" and last["attempts"] == 2
-    assert "Caught it moving" in [d["text"] for d in seen if d["type"] == "transcript"][-1]
+    assert "It moved, so I followed it" in [d["text"] for d in seen if d["type"] == "transcript"][-1]
 
 
 def test_goal_reports_an_invisible_target(client, monkeypatch):

@@ -10,13 +10,13 @@ import webrtcvad
 class VAD:
     FRAME_MS = 30
 
-    def __init__(self, sr: int = 16000, aggressiveness: int = 2, start_frames: int = 4, end_frames: int = 20,
+    def __init__(self, sr: int = 16000, aggressiveness: int = 2, start_frames: int = 4, end_frames: int = 15,
                  snr: float = 2.5, min_peaks: int = 4):
         self.sr = sr
         self.vad = webrtcvad.Vad(aggressiveness)
         self.frame_bytes = sr * self.FRAME_MS // 1000 * 2
         self.start_frames = start_frames   # 120 ms voiced to start
-        self.end_frames = end_frames       # 600 ms silence to end
+        self.end_frames = end_frames       # 450 ms of silence ends a turn (was 600; replies start sooner)
         self.strict = False                # set while SPEAKING: harder to trigger, limits echo false barge-ins
         self._buf = bytearray()
         self._pre: collections.deque[bytes] = collections.deque(maxlen=10)  # 300 ms pre-roll
