@@ -41,7 +41,8 @@ The URDF is loaded in its own process (the GUI owns its main thread on macOS; a 
 | Face detection | 7 to 12 ms per frame |
 | Goal, fake providers | aim settled 0.83 s, verified 1.33 s |
 | End of speech detected in steady noise | 0.1 to 0.35 s after speech, 10 of 10 conditions |
-| Engagement latency and flapping | not measured live; ~0.4 s first attending frame to greeting chime with scripted 5 fps frames |
+| Engagement (live) | 387 ms first attending frame to ENGAGED; no flapping in 2 min of sitting |
+| Reply time (live, 7 turns) | 2.20 s median, 2.45 s p90 from end of speech to first audio; 0 of 12 utterances were speaker echo |
 | End of speech to first audio (Gemini free tier) | 2.05 s median, 2.27 s p90 (one call hears and answers 1.60 s, streamed TTS 0.53 s); plus ~0.6 s VAD hangover |
 | Target machine CPU / memory | not measured (not run on Ubuntu); `scripts/measure_load.py --sim` |
 

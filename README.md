@@ -121,7 +121,7 @@ Filler motion (tilt, pulse, sfx) covers the language latency so the character ne
 
 ## Measurements
 
-Measured on the development machine (MacBook Air M3, 8 GB, macOS 26). Rows marked *not measured* need a person at the camera, API keys, or the Ubuntu machine; the command that measures each is listed.
+Measured on the development machine (MacBook Air M3, 8 GB, macOS 26); live rows come from a 2-minute session in an office. Rows marked *not measured* need the Ubuntu machine or a longer session; the command that measures each is listed.
 
 | What | Result | How |
 |---|---|---|
@@ -132,10 +132,11 @@ Measured on the development machine (MacBook Air M3, 8 GB, macOS 26). Rows marke
 | Memory search | 112 to 126 ms | Chroma, 3 objects, off the event loop |
 | Goal with fake providers | aim settled 0.83 s, verified 1.33 s | goal messages |
 | VAD end of utterance in steady noise | 0.1 to 0.35 s after speech, 10 of 10 noise conditions (was 3 of 10) | recorded utterance in white/pink/brown noise |
-| Engagement latency, flapping, disengagement | *not measured live*; by design ~0.4 s from the first attending frame to the greeting chime (scripted 5 fps frames) | `make fake`, use it, then `make trace` |
+| Engagement (live) | 387 ms from the first attending frame to ENGAGED; no flapping in 2 min of sitting (0 disengagements, face in 100% of frames, \|yaw\| p90 0.16); disengagement not measured live | session trace, `make trace` |
 | End of speech to first audio, Gemini free tier (median, p90) | **2.05 s, 2.27 s** one-call turn (heard + reply 1.60 s, first TTS audio 0.53 s); two-step STT + LLM + TTS would be 3.37 s | `make cloudcheck`, 3 runs, synthetic utterance, over home Wi-Fi; add ~0.6 s VAD hangover for spoken turns |
 | Scene scan, Gemini | 1.47 s median | same run |
-| Live turn latency | *not measured live* | `make run`, then `make trace` |
+| Reply time (live) | first audio 2.20 s median, 2.45 s p90, 2.81 s max after the end of speech, 7 turns (Gemini free tier, office Wi-Fi) | session trace |
+| Speaker echo (live) | 0 of 12 utterances started while the lamp was speaking (laptop speakers, no headphones) | session trace |
 | Ubuntu target CPU/memory | *not measured* (not run on Ubuntu) | `python scripts/measure_load.py 30 --sim` on the target |
 
 ## Hardware used
@@ -177,6 +178,6 @@ Completed and tested offline (30 tests, fake providers): engagement FSM with dis
 
 Verified in a real browser (headless Chrome, fake camera and mic): the client loads without errors, streams mic and camera at the expected rates, plays replies, and runs a typed goal end to end.
 
-Not yet verified live: engagement thresholds on a real face, cloud latency, barge-in on laptop speakers, the goal and memory moments with real vision, the Ubuntu install.
+Verified live (2-minute session, Gemini, laptop speakers): engagement latency, no flapping, reply time, no speaker echo; that session's problems (replies to a throat clear, a turn opened by the lamp's own chirp, dropped replies and typed messages) are fixed and covered by tests. Not yet verified live: disengagement timing, barge-in, the goal and memory moments with real vision, the Ubuntu install.
 
 Left out on purpose: streaming STT and sentence-level TTS pipelining, speaker identity, multi-person arbitration, object re-identification across renames, sound localization, learned gaze, visual servoing (the camera is the laptop's, not the lamp's `camera_link`, so aiming cannot be checked through the lamp's own view). A real speech classifier: a TV or radio voice in the room still counts as speech.
