@@ -11,6 +11,7 @@ import random
 import re
 import time
 
+import numpy as np
 from fastapi import WebSocket
 
 from .audio.vad import VAD
@@ -33,6 +34,30 @@ TTS_CACHE = "data/tts_cache"
 # Seconds a sound effect (plus room echo) keeps the mic from opening a turn: the lamp must not answer its own chirp.
 SFX_GUARD_S = {"notice": 0.45, "greet": 0.55, "listen": 0.35, "sleep": 0.9, "error": 0.55, "spot": 0.5}
 FILLERS = {"um", "uh", "uhm", "hmm", "hm", "mm", "mhm", "ah", "oh", "er", "erm"}
+
+
+SILENCE_RMS = 400  # PCM16 amplitude below which a TTS chunk counts as silence
+
+
+async def trim_silence(chunks):
+    """Drop a TTS stream's leading silence (Gemini starts every clip with about 0.4 s of it, measured) and its
+    trailing silence, keeping the pauses inside the line. Audible speech starts that much sooner."""
+    started, held = False, []
+    async for c in chunks:
+        loud = len(c) >= 2 and float(np.sqrt(np.mean(np.frombuffer(c, "<i2").astype(np.float32) ** 2))) > SILENCE_RMS
+        if not started:
+            if not loud:
+                continue
+            started = True
+        if loud:
+            for h in held:
+                yield h
+            held = []
+            yield c
+        else:
+            held.append(c)
+    if held:
+        yield held[0][:(len(held[0]) // 4) & ~1]  # keep a short natural tail (a quarter chunk, even length)
 
 
 def real_words(text: str) -> bool:
@@ -378,7 +403,7 @@ class Session:
                     pcm = open(path, "rb").read()
                     self._tts_cache[text] = [pcm[i:i + 4800] for i in range(0, len(pcm), 4800)]
                     continue
-                self._tts_cache[text] = [c async for c in self.p.tts.stream(text)]
+                self._tts_cache[text] = [c async for c in trim_silence(self.p.tts.stream(text))]
                 if path:
                     os.makedirs(os.path.dirname(path), exist_ok=True)
                     with open(path, "wb") as f:
@@ -402,7 +427,7 @@ class Session:
         elif time.monotonic() < self._tts_down_until:
             raise RuntimeError("TTS recently failed; skipping it for a while")
         else:
-            async for chunk in self.p.tts.stream(text):
+            async for chunk in trim_silence(self.p.tts.stream(text)):
                 yield chunk
 
     async def _speak(self, text: str, emotion: str, t0: float | None = None, marks: dict | None = None) -> None:

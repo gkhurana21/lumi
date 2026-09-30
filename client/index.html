@@ -58,7 +58,8 @@ aside{border-left:1px solid var(--edge);display:flex;flex-direction:column;gap:1
 .meter{height:4px;border-radius:3px;background:rgba(255,255,255,.08);margin-top:10px;overflow:hidden}
 .meter i{display:block;height:100%;width:0;background:linear-gradient(90deg,#4ade80,#facc15,#f87171);transition:width 60ms}
 .chat-card{flex:1;display:flex;flex-direction:column;min-height:0}
-#chat{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:2px 2px 6px;scroll-behavior:smooth}
+#chat::-webkit-scrollbar{width:6px}#chat::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:3px}
+#chat{flex:1;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.14) transparent;display:flex;flex-direction:column;gap:8px;padding:2px 2px 6px;scroll-behavior:smooth}
 .b{max-width:86%;padding:9px 12px;border-radius:16px;background:rgba(255,255,255,.07);animation:in .25s ease-out}
 .b.user{align-self:flex-end;background:#2b3a5c;border-bottom-right-radius:6px}.b.lumi{border-bottom-left-radius:6px}
 .b small{display:flex;gap:6px;align-items:center;color:var(--dim);font-size:11px;margin-top:3px}.b small i{width:7px;height:7px;border-radius:50%}
@@ -108,7 +109,13 @@ details summary{color:var(--dim);cursor:pointer;font-size:12px}
 <script type="module">
 const FR = {AUDIO_IN: 1, VIDEO_IN: 2, AUDIO_OUT: 3};
 const $ = id => document.getElementById(id);
-let ws, micCtx, out, playHead = 0, muted = false, sources = [], doneTimer, music = null, speaking = null;
+let ws, micCtx, out, playHead = 0, muted = false, sources = [], doneTimer, music = null, speaking = null, voiceBus, voiceMeter;
+const voiceBuf = new Float32Array(512);
+function voiceLevel() {  // 0..1, how loud the lamp's own voice is right now (drives its light while it talks)
+  if (!voiceMeter) return 0;
+  voiceMeter.getFloatTimeDomainData(voiceBuf); let s = 0; for (const x of voiceBuf) s += x * x;
+  return Math.min(1, Math.sqrt(s / voiceBuf.length) * 6);
+}
 const log = s => { const d = document.createElement('div'); d.textContent = `${new Date().toLocaleTimeString()}  ${s}`; $('log').prepend(d); };
 const pack = (k, buf) => { const u = new Uint8Array(buf.byteLength + 1); u[0] = k; u.set(new Uint8Array(buf), 1); return u.buffer; };
 
@@ -156,6 +163,8 @@ async function start() {
   micCtx.createMediaStreamSource(stream).connect(node).connect(sink).connect(micCtx.destination);
 
   out = new AudioContext({sampleRate: 24000});
+  voiceBus = out.createGain(); voiceMeter = out.createAnalyser(); voiceMeter.fftSize = 512;
+  voiceBus.connect(voiceMeter); voiceBus.connect(out.destination);
   const cv = document.createElement('canvas'); cv.width = 640; cv.height = 480; const g = cv.getContext('2d');
   setInterval(() => {  // ~5 fps; the server drops frames while busy
     if (ws.readyState !== 1) return;
@@ -182,7 +191,7 @@ function playPCM(buf) {
   const i16 = new Int16Array(buf), f = new Float32Array(i16.length);
   for (let k = 0; k < i16.length; k++) f[k] = i16[k] / 32768;
   const ab = out.createBuffer(1, f.length, 24000); ab.copyToChannel(f, 0);
-  const s = out.createBufferSource(); s.buffer = ab; s.connect(out.destination);
+  const s = out.createBufferSource(); s.buffer = ab; s.connect(voiceBus);
   playHead = Math.max(playHead, out.currentTime + 0.05); s.start(playHead); playHead += ab.duration;
   sources.push(s); s.onended = () => { sources = sources.filter(x => x !== s); };
 }
@@ -333,6 +342,8 @@ let lampUrl = null, loadLamp = () => {};
   const controls = new OrbitControls(camera, canvas);
   controls.target.set(-0.42, 0.26, 0.1); controls.enableDamping = true; controls.maxPolarAngle = 1.48;
   controls.minDistance = 0.6; controls.maxDistance = 3.2; controls.enablePan = false;
+  controls.autoRotateSpeed = 0.35; let userTookView = 0; const home = camera.position.clone();
+  controls.addEventListener('start', () => { userTookView = performance.now(); controls.autoRotate = false; });
 
   scene.add(new THREE.HemisphereLight(0x6f7fa8, 0x1a120c, 0.25));
   const rim = new THREE.DirectionalLight(0x9fb4ff, 0.35); rim.position.set(1.2, 1.6, -1.4); scene.add(rim);
@@ -394,6 +405,34 @@ let lampUrl = null, loadLamp = () => {};
   };
   loadLamp('/robot/dummy_lamp_5dof.urdf');
 
+  const DUST = 320, dustPos = new Float32Array(DUST * 3), dustVel = new Float32Array(DUST * 3), dustGlow = new Float32Array(DUST);
+  for (let i = 0; i < DUST; i++) {
+    dustPos.set([-1.1 + Math.random() * 1.3, Math.random() * 0.85, -0.55 + Math.random() * 1.1], i * 3);
+    dustVel.set([(Math.random() - .5) * 2e-4, (Math.random() - .5) * 1.5e-4, (Math.random() - .5) * 2e-4], i * 3);
+  }
+  const dustGeo = new THREE.BufferGeometry();
+  dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3)); dustGeo.setAttribute('glow', new THREE.BufferAttribute(dustGlow, 1));
+  const dustMat = new THREE.ShaderMaterial({transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    uniforms: {color: {value: new THREE.Color()}, scale: {value: 1}},
+    vertexShader: `attribute float glow; varying float vG; uniform float scale;
+      void main(){ vG = glow; vec4 mv = modelViewMatrix * vec4(position, 1.); gl_PointSize = scale * (2. + 16. * glow) / -mv.z; gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform vec3 color; varying float vG;
+      void main(){ float d = length(gl_PointCoord - .5); if (d > .5) discard; gl_FragColor = vec4(color * vG * 1.8 * (1. - 2. * d), 1.); }`});
+  const dust = new THREE.Points(dustGeo, dustMat); dust.renderOrder = 3; scene.add(dust);
+  const dv = new THREE.Vector3(), TAN = Math.tan(0.42);
+  function updateDust(apex, axis, strength) {
+    for (let i = 0; i < DUST; i++) {
+      const j = i * 3;
+      for (let a = 0; a < 3; a++) dustPos[j + a] += dustVel[j + a];
+      if (dustPos[j + 1] < 0.01 || dustPos[j + 1] > 0.9) dustVel[j + 1] *= -1;
+      if (Math.abs(dustPos[j] + 0.45) > 0.7) dustVel[j] *= -1;
+      if (Math.abs(dustPos[j + 2]) > 0.6) dustVel[j + 2] *= -1;
+      dv.set(dustPos[j] - apex.x, dustPos[j + 1] - apex.y, dustPos[j + 2] - apex.z);
+      const t = dv.dot(axis), r = dv.addScaledVector(axis, -t).length(), R = t * TAN;
+      dustGlow[i] = t > 0.02 && t < BEAM_H && r < R ? strength * (1 - r / R) * (1 - t / BEAM_H) : 0;
+    }
+    dustGeo.attributes.position.needsUpdate = dustGeo.attributes.glow.needsUpdate = true;
+  }
   const shown = {}, col = new THREE.Color(1, .8, .6), tmpCol = new THREE.Color(), p = new THREE.Vector3(), q = new THREE.Quaternion(),
         dir = new THREE.Vector3(), down = new THREE.Vector3(0, -1, 0), tag = $('tag3d');
   let k = 0.1;
@@ -412,11 +451,14 @@ let lampUrl = null, loadLamp = () => {};
       emitter.getWorldPosition(p); emitter.getWorldQuaternion(q); dir.set(1, 0, 0).applyQuaternion(q).normalize();
       col.lerp(tmpCol.setRGB(...lightTarget.rgb), .15); k += (lightTarget.k - k) * .15;
       spot.position.copy(p); spot.target.position.copy(p).addScaledVector(dir, 1); spot.target.updateMatrixWorld();
-      spot.color.copy(col); spot.intensity = 0.4 + 9 * k * k + 3 * k;
-      halo.position.copy(p).addScaledVector(dir, 0.05); halo.color.copy(col); halo.intensity = 0.05 + 0.5 * k;
+      const vk = voiceLevel(), kk = Math.min(1.2, k + 0.35 * vk);  // the light breathes with the lamp's voice
+      spot.color.copy(col); spot.intensity = 0.4 + 9 * kk * kk + 3 * kk;
+      halo.position.copy(p).addScaledVector(dir, 0.05); halo.color.copy(col); halo.intensity = 0.05 + 0.5 * kk + 0.8 * vk;
       beam.position.copy(p); beam.quaternion.setFromUnitVectors(down, dir);
-      beamMat.uniforms.color.value.copy(col); beamMat.uniforms.strength.value = 0.04 + 0.34 * k;
-      for (const m of glowMats) m.emissive.copy(col).multiplyScalar(0.25 + 2.2 * k);
+      beamMat.uniforms.color.value.copy(col); beamMat.uniforms.strength.value = 0.04 + 0.34 * kk;
+      for (const m of glowMats) m.emissive.copy(col).multiplyScalar(0.25 + 2.2 * kk + 1.5 * vk);
+      dustMat.uniforms.color.value.copy(col); dustMat.uniforms.scale.value = renderer.getPixelRatio() * 2.2;
+      updateDust(p, dir, 0.25 + 0.9 * kk);
       const reach = dir.y < -0.05 ? -p.y / dir.y : Infinity;
       if (focus && reach < 2) {
         ring.position.set(p.x + dir.x * reach, 0.002, p.z + dir.z * reach); ring.material.opacity = 0.65 + 0.3 * Math.sin(performance.now() / 180);
@@ -425,6 +467,10 @@ let lampUrl = null, loadLamp = () => {};
         tag.style.left = (s.x + 1) / 2 * stage.clientWidth + 'px'; tag.style.top = (1 - s.y) / 2 * stage.clientHeight + 'px';
       } else { ring.material.opacity = 0; tag.style.display = 'none'; }
     }
+    const calm = ['asleep', 'idle'].includes($('st').textContent);
+    const free = performance.now() - userTookView > 20000;  // the user has not touched the view for 20 s
+    controls.autoRotate = calm && free;  // a slow drift while nothing happens
+    if (!calm && free) camera.position.lerp(home, 0.04);  // and back to the front view when Lumi wakes up
     controls.update(); renderer.render(scene, camera);
   });
 })();

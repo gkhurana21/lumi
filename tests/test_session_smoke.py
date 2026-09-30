@@ -545,3 +545,25 @@ def test_session_says_hello_and_serves_the_robot_for_the_3d_view(client):
     urdf = client.get(hello["urdf"])
     assert urdf.status_code == 200 and "lamp_head_link" in urdf.text
     assert client.get("/robot/assets/lamp_shade.stl").status_code == 200
+
+
+def test_tts_silence_is_trimmed_but_inner_pauses_kept():
+    import numpy as np
+
+    from app.session import trim_silence
+
+    def chunk(amp):  # 100 ms at 24 kHz
+        return (np.sin(np.arange(2400) / 5) * amp).astype("<i2").tobytes()
+
+    stream = [chunk(0)] * 4 + [chunk(6000), chunk(0), chunk(6000)] + [chunk(0)] * 5  # 0.4 s lead, a pause, 0.5 s tail
+
+    async def gen():
+        for c in stream:
+            yield c
+
+    async def collect():
+        return [c async for c in trim_silence(gen())]
+
+    out = asyncio.run(collect())
+    assert out[0] == chunk(6000) and out[1] == chunk(0) and out[2] == chunk(6000)  # lead gone, inner pause kept
+    assert len(b"".join(out)) < len(chunk(0)) * 4  # tail cut to a short decay

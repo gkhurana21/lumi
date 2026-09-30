@@ -136,6 +136,7 @@ Measured on the development machine (MacBook Air M3, 8 GB, macOS 26); live rows 
 | End of speech to first audio, Gemini free tier (median, p90) | **1.50 s, 1.75 s** one-call turn (hears and answers 0.96 s with MINIMAL thinking, first TTS audio 0.54 s); was 2.05 s with default thinking, 6.8 s before streaming and one-call | `make cloudcheck`, 3 runs, synthetic utterance; plus the 0.45 s end-of-speech wait for spoken turns |
 | Scene scan, Gemini | 1.47 s median | same run |
 | Reply time (live) | first audio 2.20 s median, 2.45 s p90, 2.81 s max after the end of speech, 7 turns (Gemini free tier, office Wi-Fi, before the MINIMAL-thinking and 0.45 s end-of-speech changes) | session trace |
+| Voice turn end to end (real server, real Gemini, speech streamed in real time) | from the actual end of speech to audible reply: 2.45 s and 2.62 s (2 turns: about 0.65 s to be sure the speaker stopped, 1.2 s for Gemini to hear and answer, 0.55 s to first voice) | dress rehearsal, see DECISIONS |
 | Speaker echo (live) | 0 of 12 utterances started while the lamp was speaking (laptop speakers, no headphones) | session trace |
 | Ubuntu target CPU/memory | *not measured* (not run on Ubuntu) | `python scripts/measure_load.py 30 --sim` on the target |
 
