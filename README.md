@@ -8,6 +8,16 @@ Every behavior is decided locally in one Python process; the cloud only supplies
 
 ![Dashboard mid-goal: the lamp leans over the desk and spotlights the mug while it speaks; goal steps with timings, face view, memory, mood, conversation](docs/img/dashboard.png)
 
+## At a glance
+
+| | |
+|---|---|
+| **Spec moments** | engagement and disengagement, character response (motion, light, voice, SFX, music), spoken conversation, scene memory with recency, goal-directed action on the live scene (sequences of up to 3 targets, verified by re-observation) |
+| **Speed** | notices you 387 ms after you look (live); speaks 1.50 s after you stop (median, Gemini free tier) |
+| **Boundary** | every behavioral decision is local; the cloud supplies words and scene descriptions behind 4 swappable interfaces (Gemini, Claude + OpenAI, or offline fakes) |
+| **Body** | the supplied URDF, mapped by forward kinematics, every command inside its soft limits and velocity limits; rendered by PyBullet and by a 3D view in the browser |
+| **Evidence** | 65 tests (unit plus end to end over the real WebSocket with fake providers), live session traces, a decisions log with measurements, a 2-page technical note |
+
 ## Run
 
 **Target: Ubuntu 24.04 LTS** (4 cores, 8 GB, integrated GPU, no CUDA). Written for it but not yet run on a real Ubuntu machine; developed and measured on macOS (see Measurements).
@@ -21,6 +31,8 @@ make run                      # or run at login: deploy/lumi.service (systemd us
 ```
 
 Open http://localhost:8000 in **Chromium or Chrome**, press Start, allow camera + mic. The dashboard's 3D view shows the lamp (its libraries load from jsDelivr; offline it falls back to the PyBullet window, which always runs alongside). Camera and mic are read by the browser (V4L2, PipeWire/PulseAudio), so the Python side needs no audio or camera drivers. The PyBullet window shows the body; `SIM=false` skips it on a headless box. Headphones are not needed (browser echo cancellation plus a stricter VAD while the lamp speaks), but they make barge-in more reliable.
+
+**CI:** `.github/workflows/ci.yml` runs install, lint, tests, and a headless render on Ubuntu 24.04 with Python 3.12 on every push (included; not yet run, since the repo has not been pushed).
 
 **macOS (development):** `make install` builds a patched pybullet first (no arm64 wheel; about 2 min), then the same commands.
 
@@ -36,13 +48,7 @@ Open http://localhost:8000 in **Chromium or Chrome**, press Start, allow camera 
 
 ## Architecture
 
-```
-Browser (I/O surface)                     Python server (all decisions)                 PyBullet process
- camera 5 fps JPEG ─┐                      ┌─ AttentionTracker (local MediaPipe) ─┐
- mic 16k PCM 20 ms ─┼─ one WebSocket ──────┼─ VAD (webrtcvad, local)              ├─> FSM + Affect ─> Body (20 Hz) ── mp.Queue ─> joints + shade color
-                    │  [1B kind][payload]  ├─ Scene VLM every 4 s ─> SceneMemory  │         │
- speaker <──────────┘  + JSON control      └─ STT -> LLM(tool JSON) -> TTS stream ┘         └─> sfx / music / voice cues to browser
-```
+![Architecture and data flow](docs/img/architecture.svg)
 
 | Path | Files |
 |---|---|

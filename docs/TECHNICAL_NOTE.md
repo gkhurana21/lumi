@@ -4,16 +4,7 @@ Lumi is a live character around the supplied 5-DOF lamp. The laptop camera and m
 
 ## Architecture and data flow
 
-```
-Browser (I/O only) ── one WebSocket ── Python server (all behavioral decisions)
-
-camera JPEG 5 fps ──┐     local  AttentionTracker (MediaPipe) ──┐
-mic PCM 16 kHz    ──┤     local  VAD (webrtcvad + noise floor) ─┴──> FSM + Affect ──> Body 20 Hz
-                    ├─────cloud  STT -> LLM (tool JSON) -> TTS <─────┤ turns          │ queue
-voice PCM 24 kHz <──┤     cloud  scene VLM every 15 s -> memory <────┤ memory         ▼
-SFX, music, UI <────┘     local  goal executor <- {do, target} <─────┘ goals   PyBullet 240 Hz
-                                                                               (joints + light)
-```
+![Architecture and data flow](img/architecture.svg)
 
 **Protocol.** One WebSocket per interaction. Binary frames are `[kind byte][payload]`: mic PCM16 16 kHz in 20 ms chunks, camera JPEG, and TTS PCM16 24 kHz out. Control is JSON text (`state`, `transcript`, `scene`, `body`, `sfx`, `music`, `goal`, `tts_start/end`, `stop_audio`, `speak`; client sends `playback_done` and typed text). Ordered delivery makes barge-in simple: the server purges queued audio and tells the client to stop. The browser owns capture and playback, so the server needs no audio or camera drivers; SFX and music are synthesized in the browser, tempo-locked to the dance.
 
@@ -21,7 +12,7 @@ SFX, music, UI <────┘     local  goal executor <- {do, target} <──
 
 ## Model-to-action boundary
 
-Models choose *what*; the body decides *how*. The LLM is forced to answer through a tool: `{say, emotion, gesture, music, action?}`, where `action = {do: spotlight | look, target: object name}`. The scene VLM returns objects with a name, location and image position. A local executor turns a goal into a closed action sequence: find the target (re-scan if absent), aim the head and light at its image position, wait until the joints have physically arrived, switch to a white spotlight, re-observe, verify the target is still there, re-aim once if it moved, and speak a local outcome line with the light still on it. Models never see joint angles, speeds or timing; engagement, greeting, listening, interrupting and sleeping never wait on the network.
+Models choose *what*; the body decides *how*. The LLM is forced to answer through a tool: `{say, emotion, gesture, music, action?}`, where `action = {do: spotlight | look | light, targets: [object names in order], color, level}`. The scene VLM returns objects with a name, location and image position. A local executor turns a goal into a closed action sequence: find the target (re-scan if absent), aim the head and light at its image position, wait until the joints have physically arrived, switch to a white spotlight, re-observe, verify the target is still there, re-aim once if it moved, and speak a local outcome line with the light still on it; sequences visit up to 3 targets in order and the outcome names what was lit and what was not. Light commands pick from 10 named colors and a level. Models never see joint angles, speeds or timing; engagement, greeting, listening, interrupting and sleeping never wait on the network.
 
 ## Simulation and physical reasoning
 
@@ -29,7 +20,13 @@ The URDF is loaded in its own process (the GUI owns its main thread on macOS; a 
 
 ## Deployment (Ubuntu 24.04, 4 cores, 8 GB, no GPU)
 
-`deploy/setup_ubuntu.sh` installs system packages (Python 3.12 venv and headers, OpenCV runtime libraries, Mesa OpenGL, Chromium), then `make install` builds the venv from pinned direct dependencies plus a full constraints file, and prefetches the embedding model so the first scene scan does not download it. `deploy/lumi.service` is a systemd user unit tied to the graphical session, restarting on failure, logging to journald; `SIM=false` runs without the window. Everything runs on CPU: MediaPipe face detection takes 7 to 12 ms per frame, so 5 fps costs well under one core. Setup is written for the target but has not been run on Ubuntu yet.
+`deploy/setup_ubuntu.sh` installs system packages (Python 3.12 venv and headers, OpenCV runtime libraries, Mesa OpenGL, Chromium), then `make install` builds the venv from pinned direct dependencies plus a full constraints file, and prefetches the embedding model so the first scene scan does not download it. `deploy/lumi.service` is a systemd user unit tied to the graphical session, restarting on failure, logging to journald; `SIM=false` runs without the window. Everything runs on CPU: MediaPipe face detection takes 7 to 12 ms per frame, so 5 fps costs well under one core. A CI workflow (`.github/workflows/ci.yml`) installs, lints, tests, and renders on Ubuntu 24.04 with Python 3.12 on every push; neither it nor the setup script has run on Ubuntu yet.
+
+## On a real lamp
+
+- The same 20 Hz target stream would feed a motor driver process that re-applies the soft limits, velocity limits, and URDF effort limits (3.2 to 12 N m), plus an e-stop; goals would wait on measured joint state rather than commanded state.
+- A camera at `camera_link` would turn re-observation into visual servoing: aim error from the target's box center, corrected in a closed loop instead of one re-aim.
+- The light maps to an LED driver taking the same color and brightness frames; sustained full brightness would be capped for heat.
 
 ## Measurements
 

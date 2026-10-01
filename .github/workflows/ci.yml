@@ -1,0 +1,24 @@
+# Install, lint, test, and render on the deployment target (Ubuntu 24.04, Python 3.12) on every push.
+name: ci
+on: [push, pull_request]
+jobs:
+  ubuntu-target:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: System packages (same as deploy/setup_ubuntu.sh, minus Chromium)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3.12-venv python3-dev build-essential libgl1 libglib2.0-0t64 libegl1
+      - name: Install (Python 3.12 venv, pinned dependencies, embedder prefetch)
+        run: make install PYTHON=python3.12
+      - name: Lint
+        run: make lint
+      - name: Tests (fake providers, no keys, no network, no window)
+        run: make test
+      - name: Headless render (the supplied URDF and mesh load in PyBullet)
+        run: make render
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pose-renders
+          path: out/poses/
