@@ -567,3 +567,60 @@ def test_tts_silence_is_trimmed_but_inner_pauses_kept():
     out = asyncio.run(collect())
     assert out[0] == chunk(6000) and out[1] == chunk(0) and out[2] == chunk(6000)  # lead gone, inner pause kept
     assert len(b"".join(out)) < len(chunk(0)) * 4  # tail cut to a short decay
+
+
+def test_goal_sequence_visits_each_target_in_order(client, monkeypatch):
+    scripted_scenes(monkeypatch, [MUG, NOTEBOOK])
+    with client.websocket_connect("/ws") as ws:
+        seen, _ = run_goal(ws, "shine your light on the mug then the notebook")
+    aims = [(d["target"], d["index"], d["of"]) for d in seen if d["type"] == "goal" and d["step"] == "aim"]
+    assert aims == [("mug", 1, 2), ("notebook", 2, 2)]
+    done = [d["target"] for d in seen if d["type"] == "goal" and d["step"] == "done"]
+    assert done == ["mug", "notebook"]
+    outcome = [d["text"] for d in seen if d["type"] == "transcript" and d["role"] == "robot"][-1]
+    assert "mug and then your notebook" in outcome
+    yaws = [d["joints"]["base_yaw_joint"] for d in seen if d["type"] == "body" and d.get("focus")]
+    assert max(yaws) > 0.05 and min(yaws) < -0.05  # turned left for the mug, then right for the notebook
+
+
+def test_goal_sequence_reports_what_it_could_not_find(client, monkeypatch):
+    scripted_scenes(monkeypatch, [MUG, NOTEBOOK])
+    with client.websocket_connect("/ws") as ws:
+        seen, _ = run_goal(ws, "shine your light on my mug then my phone")
+    outcome = [d["text"] for d in seen if d["type"] == "transcript" and d["role"] == "robot"][-1]
+    assert "mug" in outcome and "can't see your phone" in outcome
+
+
+def test_light_commands_change_and_restore_the_lamp_light(client):
+    def light_after(ws, text):
+        say(ws, text)
+        recv_until(ws, is_state("engaged"))
+        return recv_until(ws, lambda d: d["type"] == "body")[0]["light"]
+
+    with client.websocket_connect("/ws") as ws:
+        blue = light_after(ws, "make your light blue")
+        assert blue["rgb"] == [0.3, 0.5, 1.0]
+        dim = light_after(ws, "dim your light")
+        assert dim["rgb"] == [0.3, 0.5, 1.0] and dim["brightness"] == 0.3  # color kept, level changed
+        normal = light_after(ws, "back to normal light")
+        assert normal["rgb"] != [0.3, 0.5, 1.0]  # mood light again
+
+
+def test_dim_with_default_color_keeps_the_color_and_normal_resets(client, monkeypatch):
+    from app.providers.fakes import FakeLLM
+    replies = iter([{"do": "light", "color": "blue", "level": 1},  # what Gemini sent for blue, dim, normal
+                    {"do": "light", "color": "default", "level": 0.4}, {"do": "light", "color": "default", "level": 1}])
+
+    async def respond(self, **kw):
+        return {"say": "Certainly.", "emotion": "neutral", "gesture": "none", "music": "none", "action": next(replies)}
+
+    monkeypatch.setattr(FakeLLM, "respond", respond)
+    with client.websocket_connect("/ws") as ws:
+        lights = []
+        for _ in range(3):
+            say(ws, "light please")
+            recv_until(ws, is_state("engaged"))
+            lights.append(recv_until(ws, lambda d: d["type"] == "body")[0]["light"])
+    assert lights[0] == {"rgb": [0.3, 0.5, 1.0], "brightness": 1.0}
+    assert lights[1] == {"rgb": [0.3, 0.5, 1.0], "brightness": 0.4}  # dimmed, still blue
+    assert lights[2]["rgb"] != [0.3, 0.5, 1.0]  # back to the mood light

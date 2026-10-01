@@ -28,6 +28,10 @@ GREETINGS = ["Good to see you. How can I help?", "Welcome back. At your service.
              "Ah, there you are. What can I do for you?"]
 MUSIC_BPM = {"happy": 112, "chill": 84}
 SPOT_RGB = [1.0, 0.97, 0.9]  # near-white spotlight for goals
+LIGHT_RGB = {"warm": [1.0, 0.72, 0.42], "cool": [0.55, 0.75, 1.0], "white": [1.0, 0.97, 0.9], "red": [1.0, 0.22, 0.18],
+             "orange": [1.0, 0.55, 0.2], "yellow": [1.0, 0.9, 0.3], "green": [0.3, 1.0, 0.45], "blue": [0.3, 0.5, 1.0],
+             "purple": [0.7, 0.4, 1.0], "pink": [1.0, 0.45, 0.75]}
+GOAL_HOLD_S = 1.0  # the spotlight rests on each target this long before moving to the next
 MOVE_TOL = 0.25  # image units ([-1, 1] per axis): larger shift between aim and re-observation = the object moved
 AIM_TIMEOUT_S = 2.5
 TTS_CACHE = "data/tts_cache"
@@ -374,9 +378,7 @@ class Session:
             self.fsm.affect.set_emotion(emotion)
             if reply.get("gesture", "none") != "none":
                 self.body.gesture(reply["gesture"])
-            action = reply.get("action") or {}
-            if action.get("do") in ("spotlight", "look") and str(action.get("target", "")).strip():
-                self._goal = {"do": action["do"], "target": str(action["target"]).strip()}
+            self._take_action(reply.get("action") or {})
             music = reply.get("music", "none")
             if music == "stop":
                 self._set_music("stop")
@@ -492,40 +494,66 @@ class Session:
             if self.fsm.fire(Ev.GOAL):
                 self._goal_task = self._spawn(self._run_goal(goal))
 
+    def _take_action(self, action: dict) -> None:
+        """Map the model's closed action onto local behavior. Goals run after the acknowledgement is spoken;
+        light changes apply at once."""
+        do = action.get("do")
+        raw = action.get("targets") or ([action["target"]] if action.get("target") else [])
+        targets = [str(t).strip() for t in raw if str(t).strip() and str(t).strip().lower() != "none"][:3]
+        if do in ("spotlight", "look") and targets:
+            self._goal = {"do": do, "targets": targets}
+        elif do == "light":
+            color, level = action.get("color"), action.get("level")
+            leveled = isinstance(level, int | float)
+            if color == "default" and (not leveled or level >= 0.95):  # "back to normal": the mood light again
+                self.body.user_light = None
+            elif color in LIGHT_RGB or leveled:  # "dim" arrives as color default + level: keep the color
+                rgb = LIGHT_RGB.get(color) or (self.body.user_light or (LIGHT_RGB["warm"], 0.8))[0]
+                lvl = max(0.05, min(1.0, float(level))) if leveled else (
+                    self.body.user_light[1] if self.body.user_light else 0.8)
+                self.body.user_light = (rgb, round(lvl, 2))
+            self._trace("light", color=color, level=level)
+
+    async def _pursue(self, do: str, want: str, t0: float, index: int, count: int) -> tuple[str, str, bool]:
+        """One target: find (re-scan if absent), aim, light, re-observe, verify, re-aim once if it moved.
+        Returns (status, name, followed) with status done | missing | vanished | moving."""
+        obj = find_object(self.scene_now, want)
+        if obj is None or "x" not in obj:
+            self._goal_step("observe", t0, why="not in the current scene", target=want)
+            obj = find_object(await self._observe(), want)
+        if obj is None or "x" not in obj:
+            self._goal_step("failed", t0, why="not visible", target=want)
+            return "missing", want, False
+        for attempt in range(2):
+            self._goal_step("aim", t0, target=obj["name"], x=obj["x"], y=obj["y"], index=index, of=count)
+            await self._aim(obj)
+            if do == "spotlight" and self.body.light_override is None:
+                self.body.light_override = (SPOT_RGB, 1.0)
+                self._sfx("spot")
+            self._goal_step("observe", t0, why="verify")
+            seen = find_object(await self._observe(), want)
+            if seen is None or "x" not in seen:
+                self._goal_step("failed", t0, why="lost after aiming", target=want)
+                return "vanished", want, False
+            moved = math.hypot(seen["x"] - obj["x"], seen["y"] - obj["y"])
+            self._goal_step("verify", t0, moved=round(moved, 3))
+            if moved <= MOVE_TOL:
+                self._goal_step("done", t0, attempts=attempt + 1, target=seen["name"], index=index, of=count)
+                return "done", seen["name"], attempt > 0
+            obj = seen  # it moved: re-aim once at the new position
+        self._goal_step("failed", t0, why="kept moving", target=want)
+        return "moving", want, False
+
     async def _run_goal(self, goal: dict) -> None:
-        do, want, t0 = goal["do"], goal["target"], time.perf_counter()
-        self._goal_step("start", t0, do=do, target=want)
+        do, targets, t0 = goal["do"], goal["targets"], time.perf_counter()
+        self._goal_step("start", t0, do=do, target=", ".join(targets), targets=targets)
         try:
-            obj = find_object(self.scene_now, want)
-            if obj is None or "x" not in obj:
-                self._goal_step("observe", t0, why="not in the current scene")
-                obj = find_object(await self._observe(), want)
-            if obj is None or "x" not in obj:
-                self._goal_step("failed", t0, why="not visible")
-                return await self._goal_outcome(f"I'm afraid I can't see your {want} at the moment.",
-                                                "confused", "shake")
-            for attempt in range(2):
-                self._goal_step("aim", t0, target=obj["name"], x=obj["x"], y=obj["y"])
-                await self._aim(obj)
-                if do == "spotlight" and self.body.light_override is None:
-                    self.body.light_override = (SPOT_RGB, 1.0)
-                    self._sfx("spot")
-                self._goal_step("observe", t0, why="verify")
-                seen = find_object(await self._observe(), want)
-                if seen is None or "x" not in seen:
-                    self._goal_step("failed", t0, why="lost after aiming")
-                    return await self._goal_outcome(f"Your {want} appears to have vanished.", "surprised", "shake")
-                moved = math.hypot(seen["x"] - obj["x"], seen["y"] - obj["y"])
-                self._goal_step("verify", t0, moved=round(moved, 3))
-                if moved <= MOVE_TOL:
-                    self._goal_step("done", t0, attempts=attempt + 1)
-                    text = (f"Done. Your {seen['name']} is in the spotlight." if do == "spotlight"
-                            else f"There's your {seen['name']}.")
-                    text = ("It moved, so I followed it. " if attempt else "") + text
-                    return await self._goal_outcome(text, "happy", "nod")
-                obj = seen  # it moved: re-aim once at the new position
-            self._goal_step("failed", t0, why="kept moving")
-            await self._goal_outcome(f"Your {want} won't hold still, I'm afraid.", "confused", "tilt")
+            results = []
+            for i, want in enumerate(targets):
+                if i:
+                    await asyncio.sleep(GOAL_HOLD_S)  # let the light rest on the last target before moving on
+                results.append(await self._pursue(do, want, t0, i + 1, len(targets)))
+            await self._goal_outcome(*self._goal_summary(do, results))
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -533,6 +561,24 @@ class Session:
             self._sfx("error")
             self.fsm.affect.set_emotion("confused")
             self.fsm.fire(Ev.ABORT)
+
+    @staticmethod
+    def _goal_summary(do: str, results: list[tuple[str, str, bool]]) -> tuple[str, str, str]:
+        """Local outcome line (no second model call): what was done, then what was not, in the lamp's voice."""
+        done = [name for status, name, _ in results if status == "done"]
+        bad = {"missing": "I'm afraid I can't see your {} at the moment.",
+               "vanished": "Your {} appears to have vanished.", "moving": "Your {} won't hold still, I'm afraid."}
+        problems = [bad[status].format(name) for status, name, _ in results if status != "done"]
+        if not done:
+            return " ".join(problems), "confused", "shake"
+        names = " and then your ".join(done)
+        text = (f"Done. Your {names} is in the spotlight." if do == "spotlight" and len(done) == 1 else
+                f"Done. I lit your {names}." if do == "spotlight" else f"There's your {names}.")
+        if len(results) == 1 and results[0][2]:
+            text = "It moved, so I followed it. " + text
+        if problems:
+            return text + " " + " ".join(problems), "curious", "tilt"
+        return text, "happy", "nod"
 
     # ---------- body clock ----------
     async def _ticker(self) -> None:

@@ -147,3 +147,40 @@ def test_goal_focus_keeps_the_lean_while_speaking():
         assert abs(f["joints"]["elbow_pitch_joint"] - POSES[State.SPEAKING]["elbow"]) < 0.05
     finally:
         behaviors.time = orig
+
+
+def test_idle_life_glances_while_engaged_but_not_while_listening():
+    from app.body import behaviors
+
+    clock = type("Clock", (), {"t": 0.0, "monotonic": lambda self: self.t})()
+    orig, behaviors.time = behaviors.time, clock
+    try:
+        def neck_range(state, seconds):
+            b = Body(URDF)
+            vals = []
+            for i in range(int(seconds / 0.05)):
+                v = b.update(state, Affect(), (0.0, 0.0), 0.05)["joints"]["neck_yaw_joint"]
+                clock.t += 0.05
+                if i * 0.05 > 3.0:  # after the pose has settled (LISTENING itself cocks the neck 0.5 rad)
+                    vals.append(v)
+            return max(vals) - min(vals)
+
+        assert neck_range(State.ENGAGED, 30) > 0.25  # glanced at least once in 30 s
+        assert neck_range(State.LISTENING, 30) < 0.05  # holds still while listening
+    finally:
+        behaviors.time = orig
+
+
+def test_sleeping_light_breathes():
+    from app.body import behaviors
+
+    clock = type("Clock", (), {"t": 0.0, "monotonic": lambda self: self.t})()
+    orig, behaviors.time = behaviors.time, clock
+    try:
+        b, levels = Body(URDF), []
+        for _ in range(240):
+            levels.append(b.update(State.IDLE, Affect(), (0.0, 0.0), 0.05)["light"]["brightness"])
+            clock.t += 0.05
+        assert max(levels) <= 0.15 and max(levels) - min(levels) > 0.05
+    finally:
+        behaviors.time = orig

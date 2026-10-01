@@ -91,7 +91,7 @@ details summary{color:var(--dim);cursor:pointer;font-size:12px}
     <div class="fallback" id="noGL">The 3D view needs WebGL and an internet connection for its libraries.<br>The PyBullet window shows the body.</div>
     <div class="hud tl panel"><div class="state"><span class="dot"></span><div><div style="display:flex;gap:10px;align-items:center"><span id="st">asleep</span><span class="bars"><i></i><i></i><i></i><i></i></span></div><div id="cap">Press Start, then look at the camera.</div></div></div></div>
     <div class="hud tr panel mood"><div class="pad" title="mood: valence (x) and arousal (y)"><span style="left:5px;top:3px">excited</span><span style="right:5px;bottom:3px">calm</span><i id="dot" style="left:50%;top:80%"></i></div><div><b id="mood">sleepy</b><small>mood</small></div></div>
-    <div class="hud tc panel" id="goalPanel" style="display:none"><div class="label">Goal</div><div class="steps" id="steps"></div></div>
+    <div class="hud tc panel" id="goalPanel" style="display:none"><div class="label" id="goalLabel">Goal</div><div class="steps" id="steps"></div></div>
     <div class="hud br panel"><div class="label">Lumi remembers</div><div class="chips" id="scene"><span>nothing yet</span></div></div>
     <div id="tag3d"></div>
     <div class="cta" id="cta"><button class="go" id="go2">Wake Lumi</button><p>Allow camera and microphone. Look at the camera to say hi.</p></div>
@@ -268,7 +268,12 @@ function drawScene() {
 const STEPS = ['start', 'aim', 'observe', 'verify', 'done'];
 function goalStep(m) {
   $('goalPanel').style.display = '';
-  if (m.step === 'start') $('steps').replaceChildren(...STEPS.map(n => { const s = document.createElement('span'); s.dataset.step = n; s.textContent = n; return s; }));
+  const fresh = () => $('steps').replaceChildren(...STEPS.map(n => { const s = document.createElement('span'); s.dataset.step = n; s.textContent = n; return s; }));
+  if (m.step === 'start') { fresh(); $('goalLabel').textContent = `Goal: ${m.do || ''} ${m.target || ''}`.trim(); }
+  if (m.step === 'aim' && m.of > 1) {
+    $('goalLabel').textContent = `Goal ${m.index} of ${m.of}: ${m.target}`;
+    if (m.index > 1 && $('steps').querySelector('[data-step="done"]').className) { fresh(); $('steps').firstChild.className = 'on'; }
+  }
   const el = $('steps').querySelector(`[data-step="${m.step === 'failed' ? 'done' : m.step}"]`);
   if (el) { el.className = m.step === 'failed' ? 'bad' : 'on'; el.textContent = `${m.step === 'failed' ? 'failed' : m.step} ${(m.ms / 1000).toFixed(1)} s`; }
   $('steps').querySelectorAll('span').forEach(s => { if (STEPS.indexOf(s.dataset.step) < STEPS.indexOf(m.step)) s.classList.add('on'); });

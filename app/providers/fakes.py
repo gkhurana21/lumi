@@ -16,13 +16,18 @@ class FakeLLM:
     async def respond(self, *, user_text, history, memories, scene, mood):
         await asyncio.sleep(0.4)
         t = user_text.lower()
+        colors = [c for c in ("red", "orange", "yellow", "green", "blue", "purple", "pink", "white") if c in t]
+        if "light" in t and (colors or any(w in t for w in ("dim", "brighter", "normal", "off"))):
+            level = 0.05 if " off" in t else 0.3 if "dim" in t else 1.0 if "brighter" in t else None
+            color = colors[0] if colors else "default" if "normal" in t else None
+            action = {"do": "light", **({"color": color} if color else {}), **({"level": level} if level else {})}
+            return {"say": "Of course.", "emotion": "happy", "gesture": "nod", "music": "none", "action": action}
         if any(w in t for w in ("shine", "spotlight", "light on", "look at")):
-            names = [o["name"] for o in scene if o["name"].lower() in t]
-            m = re.search(r"\bmy (\w+)", t)
-            target = names[0] if names else (m.group(1) if m else "")
+            asked = {o["name"] for o in scene if o["name"].lower() in t} | set(re.findall(r"\bmy (\w+)", t))
+            targets = sorted(asked, key=lambda n: t.index(n.lower()))[:3]  # in the order they were asked
             do = "look" if "look at" in t else "spotlight"
             return {"say": "On it!", "emotion": "excited", "gesture": "perk", "music": "none",
-                    "action": {"do": do, "target": target}}
+                    "action": {"do": do, "targets": targets}}
         if "music" in t or "song" in t:
             return {"say": "Ooh, dance break!", "emotion": "excited", "gesture": "bounce", "music": "happy"}
         if "stop" in t:

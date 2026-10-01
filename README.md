@@ -87,10 +87,10 @@ Engagement is discrete; emotion is a continuous valence/arousal vector layered o
 
 "Shine your light on my mug" goes through two layers with a hard boundary:
 
-- **Models choose what.** The LLM's structured reply carries `action: {do: spotlight | look, target: "<visible object name>"}` plus a short acknowledgement. The scene VLM reports each object's name, location, and image position.
+- **Models choose what.** The LLM's structured reply carries `action: {do: spotlight | look | light, targets: [<visible object names, in order>], color, level}` plus a short acknowledgement. The scene VLM reports each object's name, location, and image position (box).
 - **The body decides how, locally.** A planner in `Session._run_goal` finds the target (re-scanning if it is not in the current scene), aims head and light at its image position, waits until the joints have actually arrived (motion is velocity-limited), switches to a white spotlight, re-observes the scene, and verifies the target is still where it aimed. If it moved it re-aims once; if it is gone or never found, it says so. The outcome line is spoken with the light still on the target, then the lamp turns back to the user.
 
-The action set is closed (`look_at`, `light`, `observe`, `verify`, `return`), so a model can never command joint angles, speeds, or timing. Every step is sent to the client and the trace as a `goal` message with its time since the goal started.
+Goals can be sequences ("the mug, then the notebook": up to 3 targets, the light rests about a second on each, one combined outcome line that also says what it could not find). Light commands ("make your light blue", "dim it", "back to normal") pick from 10 named colors and a 0 to 1 level, and persist until changed. The action set is closed (`look_at`, `light`, `observe`, `verify`, `return`), so a model can never command joint angles, speeds, or timing. Every step is sent to the client and the trace as a `goal` message with its time since the goal started.
 
 ## Demo script (one continuous take, about 3 minutes)
 
@@ -99,9 +99,9 @@ Record the screen with the dashboard on one side and the PyBullet window on the 
 1. **Idle**: lamp slumped, dim warm light, slow breathing. Scene scans are already filling memory.
 2. **Engagement**: look at the laptop. `notice` chirp, lamp perks up and turns toward your face. Attention confirmed: `greet` chime, bounce, light brightens, spoken greeting.
 3. **Spoken interaction**: "What's on my desk?" Listen blip, head tilt, thinking pulse, spoken answer grounded in the current scene.
-4. **Goal-directed action**: with a mug on the desk, "Shine your light on my mug." Short acknowledgement, the lamp leans over and aims at the mug, the light snaps to a white spotlight with a `spot` ding, it re-checks the scene (move the mug and it re-aims once), then "There! Your mug is in my spotlight."
+4. **Goal-directed action**: with a mug and a notebook on the desk, "Shine your light on my mug, then the notebook." (or just the mug) Short acknowledgement, the lamp leans over and aims at the mug, the light snaps to a white spotlight with a `spot` ding, it re-checks the scene (move the mug and it re-aims once), then "There! Your mug is in my spotlight."
 5. **Scene memory**: put the mug out of frame. Later: "Where did I leave my mug?" Answer comes from memory with recency ("left of the keyboard, 2 min ago").
-6. **Music**: "Play me something." Lamp says so, then generative music starts, lamp dances on tempo, light cycles colors. Music ducks while you talk.
+6. **Light and music**: "Make your light blue." Then "Play me something." Lamp says so, then generative music starts, lamp dances on tempo, light cycles colors. Music ducks while you talk.
 7. **Disengagement**: look away. Lamp lingers, droops, `sleep` sound, music stops, returns to idle.
 
 What each moment shows on screen: the dashboard's face box turns green and the state badge follows the FSM; the light orb and the PyBullet glow change with mood; the goal stepper fills in with real timings while the spotlight lands on the desk under a "mug" label; the event log shows every transition, sound, and latency.

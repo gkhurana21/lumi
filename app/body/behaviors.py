@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 import os
 import queue
+import random
 import time
 import xml.etree.ElementTree as ET
 
@@ -45,7 +46,12 @@ GESTURES: dict[str, tuple[dict[str, float], str, float, float]] = {
     "bounce": ({"elbow": 0.12, "head_pitch": 0.12}, "osc", 1.4, 1.2),  # head bobs, stays level; 1.06 of 1.15 rad/s
     "droop": ({"head_pitch": 0.45, "shoulder": 0.10}, "hold", 0.0, 1.6),
     "perk": ({"elbow": 0.25, "head_pitch": -0.10}, "hold", 0.0, 1.0),  # 0.79 of 1.15 rad/s
+    # idle life only (not offered to the LLM): a glance aside and back, 0.69 of 1.60 rad/s
+    "glance_left": ({"neck_yaw": 0.35, "head_pitch": -0.08}, "hold", 0.0, 1.6),
+    "glance_right": ({"neck_yaw": -0.35, "head_pitch": -0.08}, "hold", 0.0, 1.6),
 }
+IDLE_LIFE = ("glance_left", "glance_right", "tilt")  # while engaged and nothing is happening
+IDLE_LIFE_GAP_S = (7.0, 13.0)
 GAZE_YAW = {"base_yaw": -0.25, "neck_yaw": -0.30}  # rad per unit face offset; sums to ~half a laptop camera's FOV
 GAZE_PITCH = 0.35
 
@@ -81,8 +87,11 @@ class Body:
         self.sim_q, self.k = sim_q, smoothing
         self.t0 = time.monotonic()
         self._gest: tuple[str, float] | None = None
+        self._rng = random.Random(7)  # seeded: idle life is lively but reproducible
+        self._next_life = time.monotonic() + self._rng.uniform(*IDLE_LIFE_GAP_S)
         self.dance_bpm: float | None = None  # set while music plays
         self.light_override: tuple[list[float], float] | None = None  # (rgb, brightness), e.g. a goal spotlight
+        self.user_light: tuple[list[float], float] | None = None  # asked for by the user ("make it blue"); persists
         self.focus: str | None = None  # name of what the lamp is aiming at during a goal (display only)
         self._want = {r: 0.0 for r in self.map}  # clamped pose target from the last update
 
@@ -90,6 +99,15 @@ class Body:
     def settled(self) -> bool:
         """True once every joint command is within SETTLED_TOL of its pose target (motion is velocity-limited)."""
         return all(abs(self.out[r] - self._want[r]) < SETTLED_TOL for r in self.map)
+
+    def _idle_life(self, state: State, now: float) -> None:
+        """While engaged and nothing else is happening, glance aside or cock the head every 7 to 13 s, so the
+        character never freezes. Any other state pushes the next one back."""
+        if state != State.ENGAGED or self._gest or self.dance_bpm or self.focus:
+            self._next_life = max(self._next_life, now + self._rng.uniform(3.0, 6.0))
+        elif now >= self._next_life:
+            self.gesture(self._rng.choice(IDLE_LIFE))
+            self._next_life = now + self._rng.uniform(*IDLE_LIFE_GAP_S)
 
     def gesture(self, name: str) -> None:
         if name in GESTURES:
@@ -143,6 +161,7 @@ class Body:
             tgt["head_pitch"] += 0.3 * max(0.0, -affect.valence)  # sadness droops
 
         a = 1 - math.exp(-self.k * (0.6 + 0.8 * ar) * dt)  # excited = snappier
+        self._idle_life(state, now)
         overlay = self._overlay(state, ar, now)
         for r, (_name, lo, hi, vmax) in self.map.items():
             self._want[r] = max(lo, min(hi, tgt[r]))
@@ -153,9 +172,14 @@ class Body:
 
         v01 = (affect.valence + 1) / 2
         rgb = [round(c + (w - c) * v01, 3) for c, w in zip(COOL, WARM, strict=True)]
-        bright = 0.15 if state == State.IDLE else 0.5 + 0.4 * ar
+        # asleep, the light breathes slowly; awake, it brightens with arousal
+        bright = 0.15 * (0.7 + 0.3 * math.sin(2 * math.pi * 0.1 * t)) if state == State.IDLE else 0.5 + 0.4 * ar
         if state == State.THINKING:
             bright *= 0.8 + 0.2 * math.sin(2 * math.pi * 1.5 * t)
+        if self.user_light:  # the user's color and level replace the mood light (still dim while asleep)
+            rgb, bright = list(self.user_light[0]), self.user_light[1]
+            if state == State.IDLE:
+                bright = min(bright, 0.15)
         if self.dance_bpm:  # color cycles on the beat
             ph = 2 * math.pi * self.dance_bpm / 60 * t / 4
             rgb = [round(0.6 + 0.4 * math.sin(ph + o), 3) for o in (0, 2.1, 4.2)]

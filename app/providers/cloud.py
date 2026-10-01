@@ -12,7 +12,8 @@ from ..core.fsm import EMOTIONS
 
 GESTURES = ["none", "nod", "shake", "tilt", "bounce", "droop", "perk"]
 MUSIC = ["none", "happy", "chill", "stop"]
-ACTIONS = ["none", "spotlight", "look"]
+ACTIONS = ["none", "spotlight", "look", "light"]
+LIGHT_COLORS = ["default", "warm", "cool", "white", "red", "orange", "yellow", "green", "blue", "purple", "pink"]
 
 PERSONA = """You are Lumi, a desk-lamp robot with the manner of a refined British AI butler, in the spirit of a
 movie AI assistant: calm, articulate, impeccably polite, quietly confident, with dry, understated wit.
@@ -21,9 +22,11 @@ Everything you say is spoken aloud: one or two short sentences, no lists, no mar
 Express feelings through the emotion and gesture fields; your body will act them out.
 You can play music (happy or chill) and you dance while it plays.
 If asked about the scene, answer from what you can see or remember. If you don't know, say so with composure.
-If the user asks you to do something physical with an object you can see (shine your light on it, look at it),
-set action with the object's name exactly as you see it listed, and say only a brief acknowledgement: your body
-then does it, checks the scene again, and reports the result itself."""
+If the user asks you to do something physical with objects you can see (shine your light on them, look at them),
+set action do=spotlight or look with targets: the objects' names exactly as listed, in the order asked (up to 3).
+Say only a brief acknowledgement: your body then does it, checks the scene again, and reports the result itself.
+If the user asks about your own light (a color, brighter, dimmer, off, back to normal), set action do=light with
+a color and/or a level from 0 to 1 (off is 0.05, normal is color default)."""
 
 RESPOND_TOOL = {
     "name": "respond",
@@ -41,8 +44,12 @@ RESPOND_TOOL = {
                 "description": "A physical goal on a visible object. Omit or use do=none otherwise.",
                 "properties": {
                     "do": {"type": "string", "enum": ACTIONS,
-                           "description": "spotlight: aim your light at it and brighten. look: turn to look at it."},
-                    "target": {"type": "string", "description": "Name of a visible object, as listed."},
+                           "description": "spotlight: aim your light at each target in turn. look: look at each. "
+                                          "light: change your own light's color or brightness."},
+                    "targets": {"type": "array", "items": {"type": "string"},
+                                "description": "Visible object names, as listed, in the order to visit (up to 3)."},
+                    "color": {"type": "string", "enum": LIGHT_COLORS, "description": "For do=light."},
+                    "level": {"type": "number", "description": "For do=light: brightness 0 to 1."},
                 },
                 "required": ["do"],
             },
