@@ -20,7 +20,7 @@ The URDF is loaded in its own process (the GUI owns its main thread on macOS; a 
 
 ## Deployment (Ubuntu 24.04, 4 cores, 8 GB, no GPU)
 
-`deploy/setup_ubuntu.sh` installs system packages (Python 3.12 venv and headers, OpenCV runtime libraries, Mesa OpenGL, Chromium), then `make install` builds the venv from pinned direct dependencies plus a full constraints file, and prefetches the embedding model so the first scene scan does not download it. `deploy/lumi.service` is a systemd user unit tied to the graphical session, restarting on failure, logging to journald; `SIM=false` runs without the window. Everything runs on CPU: MediaPipe face detection takes 7 to 12 ms per frame, so 5 fps costs well under one core. A CI workflow (`.github/workflows/ci.yml`) installs, lints, tests, and renders on Ubuntu 24.04 with Python 3.12 on every push; neither it nor the setup script has run on Ubuntu yet.
+`deploy/setup_ubuntu.sh` installs system packages (Python 3.12 venv and headers, OpenCV runtime libraries, Mesa OpenGL, Chromium), then `make install` builds the venv from pinned direct dependencies plus a full constraints file, and prefetches the embedding model so the first scene scan does not download it. `deploy/lumi.service` is a systemd user unit tied to the graphical session, restarting on failure, logging to journald; `SIM=false` runs without the window. Everything runs on CPU: MediaPipe face detection takes 7 to 12 ms per frame, so 5 fps costs well under one core. A CI workflow (`.github/workflows/ci.yml`) installs, lints, tests, and renders on Ubuntu 24.04 with Python 3.12 on every push, and passes; the interactive setup (Chromium, the PyBullet window) has not been run on Ubuntu.
 
 ## On a real lamp
 

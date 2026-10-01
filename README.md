@@ -20,7 +20,7 @@ Every behavior is decided locally in one Python process; the cloud only supplies
 
 ## Run
 
-**Target: Ubuntu 24.04 LTS** (4 cores, 8 GB, integrated GPU, no CUDA). Written for it but not yet run on a real Ubuntu machine; developed and measured on macOS (see Measurements).
+**Target: Ubuntu 24.04 LTS** (4 cores, 8 GB, integrated GPU, no CUDA). Install, tests, and a headless render [pass in CI on Ubuntu 24.04 with Python 3.12](https://github.com/gkhurana21/lumi/actions/runs/36923335413); developed and measured on macOS (see Measurements).
 
 ```bash
 git clone <repo> ~/lumi && cd ~/lumi
@@ -32,7 +32,7 @@ make run                      # or run at login: deploy/lumi.service (systemd us
 
 Open http://localhost:8000 in **Chromium or Chrome**, press Start, allow camera + mic. The dashboard's 3D view shows the lamp (its libraries load from jsDelivr; offline it falls back to the PyBullet window, which always runs alongside). Camera and mic are read by the browser (V4L2, PipeWire/PulseAudio), so the Python side needs no audio or camera drivers. The PyBullet window shows the body; `SIM=false` skips it on a headless box. Headphones are not needed (browser echo cancellation plus a stricter VAD while the lamp speaks), but they make barge-in more reliable.
 
-**CI:** `.github/workflows/ci.yml` runs install, lint, tests, and a headless render on Ubuntu 24.04 with Python 3.12 on every push (included; not yet run, since the repo has not been pushed).
+**CI:** `.github/workflows/ci.yml` runs install, lint, tests, and a headless render on Ubuntu 24.04 with Python 3.12 on every push; [it passes](https://github.com/gkhurana21/lumi/actions/runs/36923335413) (the setup script itself, with Chromium and the PyBullet window, has not been run on Ubuntu).
 
 **macOS (development):** `make install` builds a patched pybullet first (no arm64 wheel; about 2 min), then the same commands.
 
